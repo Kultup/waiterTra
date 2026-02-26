@@ -32,8 +32,7 @@ body {
   margin-left: 260px;
   padding: 2.5rem;
   background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.05), transparent);
-  overflow-y: auto;
-  min-height: 0;
+  overflow: hidden;
 }
 
 .content-header {
