@@ -98,7 +98,7 @@
 .game-builder-editor {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: calc(100vh - 5rem); /* 2 × 2.5rem — відступи admin-main зверху та знизу */
     gap: 1rem;
     animation: fadeIn 0.3s ease;
 }
