@@ -23,7 +23,8 @@ body {
 
 .admin-container {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .admin-main {
@@ -31,6 +32,8 @@ body {
   margin-left: 260px;
   padding: 2.5rem;
   background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.05), transparent);
+  overflow-y: auto;
+  height: 100vh;
 }
 
 .content-header {
