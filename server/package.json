@@ -1,7 +1,7 @@
 {
-  "name": "hr-server",
+  "name": "serviq-server",
   "version": "1.0.0",
-  "description": "HR System Backend",
+  "description": "ServIQ — Backend",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

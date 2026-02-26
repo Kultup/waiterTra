@@ -33,8 +33,8 @@ const Dashboard = () => {
     return (
         <div className="dashboard">
             <header className="dashboard-header">
-                <h1>Вітаємо в AdminPanel</h1>
-                <p>Керування системою тестування та віртуальним столом</p>
+                <h1>Вітаємо в ServIQ</h1>
+                <p>Платформа навчання та оцінки персоналу</p>
             </header>
 
             <div className="stats-grid">

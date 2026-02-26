@@ -1,4 +1,4 @@
-# Roadmap — HR Training System
+# Roadmap — ServIQ
 
 > Поточна версія: монолітний Express + React, один адмін, два навчальні модулі.
 
