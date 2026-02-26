@@ -1,0 +1,243 @@
+.test-results-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.results-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.results-page-header h2 {
+    margin: 0;
+    font-size: 1.8rem;
+}
+
+.btn-refresh {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #fff;
+    padding: 0.6rem 1.1rem;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+}
+
+.btn-refresh:hover {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: var(--accent-blue);
+}
+
+/* ── Tabs ──────────────────────────────────────────────────────── */
+
+.results-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 0.4rem;
+    width: fit-content;
+}
+
+.tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.2rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.tab-btn.active {
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--accent-blue);
+    font-weight: 600;
+}
+
+.tab-count {
+    background: rgba(56, 189, 248, 0.2);
+    color: var(--accent-blue);
+    border-radius: 20px;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+/* ── Groups ────────────────────────────────────────────────────── */
+
+.results-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+}
+
+.result-group {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.result-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.4rem;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-wrap: wrap;
+    gap: 0.8rem;
+}
+
+.group-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.group-icon {
+    font-size: 1.2rem;
+}
+
+.group-title h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.group-meta {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.meta-chip {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.meta-chip.passed {
+    background: rgba(74, 222, 128, 0.12);
+    color: #4ade80;
+}
+
+.meta-chip.fail {
+    background: rgba(248, 113, 113, 0.12);
+    color: #f87171;
+}
+
+.meta-chip.neutral {
+    background: rgba(56, 189, 248, 0.1);
+    color: var(--accent-blue);
+}
+
+/* ── Table ─────────────────────────────────────────────────────── */
+
+.result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+.result-table th {
+    padding: 0.65rem 1rem;
+    text-align: left;
+    color: var(--text-secondary);
+    font-weight: 500;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.result-table td {
+    padding: 0.7rem 1rem;
+    color: var(--text-main);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: middle;
+}
+
+.result-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.result-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.col-date {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.col-ending {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.score-badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.score-badge small {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 400;
+}
+
+.status-pill {
+    display: inline-block;
+    padding: 0.2rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-pill.pass {
+    background: rgba(74, 222, 128, 0.12);
+    color: #4ade80;
+}
+
+.status-pill.fail {
+    background: rgba(248, 113, 113, 0.12);
+    color: #f87171;
+}
+
+/* ── States ────────────────────────────────────────────────────── */
+
+.results-loading,
+.results-empty {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
