@@ -37,7 +37,7 @@ cd client && npm test
 ## Environment
 
 The server reads from a `.env` file in `server/`:
-- `MONGODB_URI` — defaults to `mongodb://localhost:27017/hr-system`
+- `MONGODB_URI` — defaults to `mongodb://localhost:27017/serviq`
 - `PORT` — defaults to `5000`
 
 `client/.env` contains `HOST=0.0.0.0` which makes the CRA dev server bind to all network interfaces. The API URL is resolved dynamically via `window.location.hostname`, so the app works on both `localhost` and any LAN IP without configuration.

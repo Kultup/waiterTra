@@ -29,8 +29,8 @@ const Login = ({ onLogin }) => {
       <div className="login-card">
         <div className="login-logo">
           <span className="login-logo-icon">🍽️</span>
-          <h1>AdminPanel</h1>
-          <p>Система навчання персоналу</p>
+          <h1>ServIQ</h1>
+          <p>Платформа навчання персоналу</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">

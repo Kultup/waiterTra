@@ -13,7 +13,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout }) => {
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
-        <h2>AdminPanel</h2>
+        <h2>ServIQ</h2>
         <button className="mobile-close" onClick={() => setIsOpen(false)}>×</button>
       </div>
       <nav className="sidebar-nav">

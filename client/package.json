@@ -1,5 +1,5 @@
 {
-  "name": "hr-client",
+  "name": "serviq-client",
   "version": "0.1.0",
   "private": true,
   "dependencies": {

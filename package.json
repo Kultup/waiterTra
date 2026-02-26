@@ -1,7 +1,7 @@
 {
-  "name": "hr-system",
+  "name": "serviq",
   "version": "1.0.0",
-  "description": "HR Management System",
+  "description": "ServIQ — платформа навчання персоналу сфери гостинності",
   "main": "server/index.js",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
@@ -11,7 +11,9 @@
     "seed:game": "cd server && node seedScenario.js"
   },
   "keywords": [
-    "hr",
+    "serviq",
+    "hospitality",
+    "training",
     "react",
     "mongodb"
   ],
