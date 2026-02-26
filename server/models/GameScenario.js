@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const gameChoiceSchema = new mongoose.Schema({
-  text:       { type: String, required: true },
+  text:       { type: String, default: '' },
   nextNodeId: { type: String, default: null },
   isWin:      { type: Boolean, default: false },
   result:     { type: String, default: '' }
@@ -17,7 +17,7 @@ const gameCharacterSchema = new mongoose.Schema({
 
 const gameNodeSchema = new mongoose.Schema({
   nodeId:    { type: String, required: true },
-  text:      { type: String, required: true },
+  text:      { type: String, default: '' },
   speakerId: { type: String, default: null },
   choices:   [gameChoiceSchema]
 }, { _id: false });
