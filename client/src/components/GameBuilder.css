@@ -100,6 +100,7 @@
     flex-direction: column;
     height: calc(100vh - 5rem); /* 2 × 2.5rem — відступи admin-main зверху та знизу */
     gap: 1rem;
+    overflow: hidden;
     animation: fadeIn 0.3s ease;
 }
 
@@ -109,6 +110,7 @@
     align-items: flex-start;
     gap: 1rem;
     flex-wrap: wrap;
+    flex-shrink: 0;
     padding-bottom: 1rem;
     border-bottom: 1px solid var(--border);
 }
