@@ -1,0 +1,420 @@
+/* ═══════════════════════════════════════════════════════════
+   COMPLEX TEST BUILDER — Admin page
+   ═══════════════════════════════════════════════════════════ */
+
+.complex-builder {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.complex-builder-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+    flex-shrink: 0;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.complex-builder-header h1 {
+    margin: 0;
+    font-size: 1.7rem;
+}
+
+.complex-builder-header p {
+    color: var(--text-secondary);
+    margin: 0.3rem 0 0;
+    font-size: 0.9rem;
+}
+
+.builder-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+/* ── Form fields ─────────────────────────────────────────── */
+
+.builder-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 1rem;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.builder-main {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.builder-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.builder-field label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.builder-field input,
+.builder-field textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: #fff;
+    outline: none;
+    transition: all 0.2s;
+    box-sizing: border-box;
+    font-size: 0.95rem;
+    font-family: inherit;
+}
+
+.builder-field input:focus,
+.builder-field textarea:focus {
+    border-color: var(--accent-blue);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+}
+
+.builder-field textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+/* ── Steps list ──────────────────────────────────────────── */
+
+.steps-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.4rem;
+}
+
+.steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.step-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    transition: all 0.15s;
+}
+
+.step-card:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.step-number {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+.step-number.desk {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.step-number.game {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.step-number.quiz {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.step-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.step-info .step-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.step-info .step-type {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+.step-remove {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+
+.step-remove:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #fff;
+}
+
+.step-arrows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.step-arrow {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    width: 22px;
+    height: 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    padding: 0;
+}
+
+.step-arrow:hover {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+}
+
+.step-arrow:disabled {
+    opacity: 0.2;
+    cursor: not-allowed;
+}
+
+.empty-steps {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+}
+
+/* ── Sidebar: available items ────────────────────────────── */
+
+.builder-sidebar {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sidebar-section {
+    margin-bottom: 1rem;
+}
+
+.sidebar-section:last-child {
+    margin-bottom: 0;
+}
+
+.sidebar-section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.sidebar-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    overflow-y: auto;
+    max-height: 200px;
+}
+
+.sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.65rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 0.82rem;
+}
+
+.sidebar-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.sidebar-item .item-icon {
+    flex-shrink: 0;
+}
+
+.sidebar-item .item-title {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-empty {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    padding: 0.5rem;
+    opacity: 0.6;
+}
+
+/* ── Saved tests list ────────────────────────────────────── */
+
+.saved-tests {
+    margin-top: 1rem;
+}
+
+.saved-test-card {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 0.75rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    margin-bottom: 0.4rem;
+    transition: all 0.15s;
+}
+
+.saved-test-card:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.saved-test-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.saved-test-info .test-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.saved-test-info .test-meta {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+.saved-test-actions {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.saved-test-actions button {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    padding: 0.25rem 0.45rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+    min-width: 28px;
+    text-align: center;
+}
+
+.saved-test-actions button:hover {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+}
+
+.saved-test-actions .btn-delete:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+.saved-copied {
+    color: #4ade80;
+    font-size: 0.8rem;
+    padding: 0 0.3rem;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+    .builder-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        overflow: auto;
+    }
+
+    .builder-sidebar {
+        order: -1;
+        max-height: 300px;
+    }
+
+    .sidebar-items {
+        max-height: 120px;
+    }
+}
+
+@media (max-width: 500px) {
+    .complex-builder-header h1 {
+        font-size: 1.3rem;
+    }
+}

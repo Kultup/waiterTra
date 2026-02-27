@@ -4,7 +4,7 @@ const API_URL = process.env.REACT_APP_API_URL || `http://${window.location.hostn
 
 // Додаємо токен авторизації до всіх запитів
 axios.interceptors.request.use(config => {
-  const token = localStorage.getItem('admin_token');
+  const token = localStorage.getItem('token');
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`;
   }

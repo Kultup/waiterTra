@@ -9,8 +9,15 @@ import TestResults from './components/TestResults.js';
 import GameBuilder from './components/GameBuilder.js';
 import GamePlay from './components/GamePlay.js';
 import Login from './components/Login.js';
+import VisualGameBuilder from './components/VisualGameBuilder.js';
+import QuizBuilder from './components/QuizBuilder.js';
+import QuizPlay from './components/QuizPlay.js';
+import UserManager from './components/UserManager.js';
+import MultiDeskTest from './components/MultiDeskTest.js';
+import ComplexTestBuilder from './components/ComplexTestBuilder.js';
+import ComplexTestPlay from './components/ComplexTestPlay.js';
 
-function AdminPanel({ onLogout }) {
+function AdminPanel({ onLogout, user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -27,16 +34,21 @@ function AdminPanel({ onLogout }) {
         isOpen={sidebarOpen}
         setIsOpen={setSidebarOpen}
         onLogout={onLogout}
+        user={user}
       />
       <main className="admin-main">
         <Routes>
-          <Route index element={<Dashboard />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="virtual-desk" element={<VirtualDesk />} />
+          <Route index element={<Dashboard user={user} />} />
+          <Route path="dashboard" element={<Dashboard user={user} />} />
+          <Route path="users" element={user?.role === 'superadmin' ? <UserManager /> : <Dashboard user={user} />} />
+          <Route path="virtual-desk" element={['superadmin', 'admin'].includes(user?.role) ? <VirtualDesk /> : <Dashboard user={user} />} />
           <Route path="test-results" element={<TestResults />} />
-          <Route path="game-builder" element={<GameBuilder />} />
+          <Route path="game-builder" element={['superadmin', 'admin'].includes(user?.role) ? <GameBuilder /> : <Dashboard user={user} />} />
+          <Route path="visual-builder" element={['superadmin', 'admin', 'trainer'].includes(user?.role) ? <VisualGameBuilder /> : <Dashboard user={user} />} />
+          <Route path="quiz-builder" element={['superadmin', 'admin', 'trainer'].includes(user?.role) ? <QuizBuilder /> : <Dashboard user={user} />} />
+          <Route path="complex-builder" element={['superadmin', 'admin'].includes(user?.role) ? <ComplexTestBuilder /> : <Dashboard user={user} />} />
           <Route path="settings" element={<div className="placeholder-view"><h2>Налаштування системи</h2><p>Цей розділ в розробці...</p></div>} />
-          <Route path="*" element={<Dashboard />} />
+          <Route path="*" element={<Dashboard user={user} />} />
         </Routes>
       </main>
     </div>
@@ -45,14 +57,23 @@ function AdminPanel({ onLogout }) {
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    () => !!localStorage.getItem('admin_token')
+    () => !!localStorage.getItem('token')
   );
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
 
-  const handleLogin = () => setIsAuthenticated(true);
+  const handleLogin = (token, userData) => {
+    setIsAuthenticated(true);
+    setUser(userData);
+  };
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setIsAuthenticated(false);
+    setUser(null);
   };
 
   return (
@@ -60,11 +81,14 @@ function App() {
       <Routes>
         <Route path="/test/:hash" element={<StudentTest />} />
         <Route path="/game/:hash" element={<GamePlay />} />
+        <Route path="/quiz/:hash" element={<QuizPlay />} />
+        <Route path="/multi-test/:hash" element={<MultiDeskTest />} />
+        <Route path="/complex/:hash" element={<ComplexTestPlay />} />
         <Route
           path="/*"
           element={
             isAuthenticated
-              ? <AdminPanel onLogout={handleLogout} />
+              ? <AdminPanel onLogout={handleLogout} user={user} />
               : <Login onLogin={handleLogin} />
           }
         />

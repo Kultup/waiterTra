@@ -1,0 +1,206 @@
+/* ═══════════════════════════════════════════════════════════
+   MULTI-DESK TEST — Sequential table setting tests
+   ═══════════════════════════════════════════════════════════ */
+
+.multi-desk-container {
+    min-height: 100vh;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Stepper ─────────────────────────────────────────────── */
+
+.stepper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.stepper-step {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.step-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.step-circle.active {
+    border-color: var(--accent-blue);
+    background: rgba(56, 189, 248, 0.15);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+
+.step-circle.done {
+    border-color: #4ade80;
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
+}
+
+.step-line {
+    width: 32px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.08);
+    transition: background 0.3s;
+}
+
+.step-line.done {
+    background: #4ade80;
+}
+
+.step-name {
+    display: none;
+}
+
+/* ── Step header ─────────────────────────────────────────── */
+
+.step-header {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.step-header h2 {
+    margin: 0 0 0.3rem;
+    font-size: 1.4rem;
+}
+
+.step-header p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* ── Summary ─────────────────────────────────────────────── */
+
+.multi-summary {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    backdrop-filter: blur(20px);
+    animation: fadeInUp 0.4s ease;
+}
+
+.multi-summary h2 {
+    text-align: center;
+    margin: 0 0 1.5rem;
+    font-size: 1.6rem;
+}
+
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+
+.summary-table th,
+.summary-table td {
+    padding: 0.75rem 0.8rem;
+    text-align: left;
+    font-size: 0.9rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.summary-table th {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+
+.summary-table .passed-row td {
+    color: #4ade80;
+}
+
+.summary-table .failed-row td {
+    color: #f87171;
+}
+
+.overall-result {
+    text-align: center;
+    padding: 1.5rem 0 1rem;
+}
+
+.overall-score {
+    font-size: 3rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+
+.overall-status {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
+
+.multi-summary .btn-save-template {
+    width: 100%;
+    text-align: center;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 700px) {
+    .multi-desk-container {
+        padding: 0.75rem;
+    }
+
+    .stepper {
+        gap: 0.15rem;
+    }
+
+    .step-circle {
+        width: 30px;
+        height: 30px;
+        font-size: 0.75rem;
+    }
+
+    .step-line {
+        width: 20px;
+    }
+
+    .multi-summary {
+        padding: 1.25rem;
+    }
+
+    .multi-summary h2 {
+        font-size: 1.3rem;
+    }
+
+    .overall-score {
+        font-size: 2.2rem;
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

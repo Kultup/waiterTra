@@ -22,6 +22,8 @@ const templatesRouter = require('./routes/templates');
 const testsRouter = require('./routes/tests');
 const testResultsRouter = require('./routes/testResults');
 const { scenariosRouter, linksRouter, resultsRouter } = require('./routes/game');
+const quizRouter = require('./routes/quiz');
+const complexTestRouter = require('./routes/complexTest');
 
 app.use('/api/auth', authRouter);
 app.use('/api/desk-items', deskRouter);
@@ -31,6 +33,8 @@ app.use('/api/test-results', testResultsRouter);
 app.use('/api/game-scenarios', scenariosRouter);
 app.use('/api/game-links', linksRouter);
 app.use('/api/game-results', resultsRouter);
+app.use('/api/quiz', quizRouter);
+app.use('/api/complex-tests', complexTestRouter);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

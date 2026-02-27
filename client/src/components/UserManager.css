@@ -1,0 +1,160 @@
+.user-manager-container {
+    padding: 2rem;
+    color: #f3f4f6;
+}
+
+.user-manager-header {
+    margin-bottom: 2rem;
+}
+
+.user-manager-header h2 {
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.error-message {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.create-user-section {
+    background: #1e293b;
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    border: 1px solid #334155;
+}
+
+.create-user-section h3 {
+    margin-bottom: 1rem;
+}
+
+.create-user-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.create-user-form input,
+.create-user-form select {
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: white;
+    padding: 0.6rem 1rem;
+    border-radius: 6px;
+    flex: 1;
+}
+
+.btn-create {
+    background: #38bdf8;
+    color: #0f172a;
+    border: none;
+    padding: 0.6rem 1.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #1e293b;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #334155;
+}
+
+.users-table th,
+.users-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid #334155;
+}
+
+.users-table th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.role-badge {
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+.role-badge.superadmin {
+    background: rgba(234, 179, 8, 0.1);
+    color: #eab308;
+}
+
+.role-badge.admin {
+    background: rgba(56, 189, 248, 0.1);
+    color: #38bdf8;
+}
+
+.role-badge.trainer {
+    background: rgba(168, 85, 247, 0.1);
+    color: #a855f7;
+}
+
+.role-badge.viewer {
+    background: rgba(148, 163, 184, 0.1);
+    color: #94a3b8;
+}
+
+.btn-delete {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-delete:hover {
+    background: #ef4444;
+    color: white;
+}
+
+.role-descriptions-section {
+    background: #1e293b;
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    border: 1px solid #334155;
+}
+
+.role-descriptions-section h3 {
+    margin-bottom: 1rem;
+}
+
+.role-desc-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.role-desc-table th,
+.role-desc-table td {
+    padding: 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid #334155;
+}
+
+.role-desc-table th {
+    color: #94a3b8;
+    font-size: 0.9rem;
+}
+
+.role-desc-table td {
+    color: #cbd5e1;
+}

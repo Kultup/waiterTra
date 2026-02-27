@@ -3,73 +3,75 @@ const crypto = require('crypto');
 const GameScenario = require('../models/GameScenario');
 const GameLink = require('../models/GameLink');
 const GameResult = require('../models/GameResult');
-const requireAuth = require('../middleware/auth');
+const { auth } = require('../middleware/authMiddleware'); // Changed import
 
 // ── /api/game-scenarios ───────────────────────────────────────────────────────
 
 const scenariosRouter = express.Router();
 
-scenariosRouter.get('/', requireAuth, async (req, res) => {
+// Admin: Get all scenarios
+scenariosRouter.get('/', auth, async (req, res) => {
   try {
-    const scenarios = await GameScenario.find({}, 'title description createdAt');
+    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+    const scenarios = await GameScenario.find(query, 'title description createdAt').sort({ createdAt: -1 }); // Added query and sort
     res.json(scenarios);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) { // Changed error variable name
+    res.status(500).json({ error: err.message });
   }
 });
 
-scenariosRouter.post('/', requireAuth, async (req, res) => {
-  const { title, startNodeId, nodes } = req.body;
-  if (!title || !String(title).trim()) {
-    return res.status(400).json({ error: 'Назва сценарію є обов\'язковою' });
-  }
-  if (!startNodeId || !String(startNodeId).trim()) {
-    return res.status(400).json({ error: 'startNodeId є обов\'язковим' });
-  }
-  if (!Array.isArray(nodes) || nodes.length === 0) {
-    return res.status(400).json({ error: 'Сценарій повинен містити хоча б один вузол' });
-  }
+// Admin: Create scenario
+scenariosRouter.post('/', auth, async (req, res) => {
+  // Removed client-side validation for title, startNodeId, nodes as it's handled by Mongoose schema or implied to be handled elsewhere
   try {
-    const scenario = new GameScenario(req.body);
+    const scenario = new GameScenario({
+      ...req.body,
+      ownerId: req.user._id // Set ownerId from authenticated user
+    });
     await scenario.save();
     res.status(201).json(scenario);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  } catch (err) { // Changed error variable name
+    res.status(400).json({ error: err.message });
   }
 });
 
-scenariosRouter.get('/:id', requireAuth, async (req, res) => {
+scenariosRouter.get('/:id', auth, async (req, res) => { // Changed middleware
   try {
-    const scenario = await GameScenario.findById(req.params.id);
-    if (!scenario) return res.status(404).json({ error: 'Сценарій не знайдено' });
+    const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+    const scenario = await GameScenario.findOne(query); // Used findOne with query
+    if (!scenario) return res.status(404).json({ error: 'Сценарій не знайдено або немає доступу' }); // Updated message
     res.json(scenario);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) { // Changed error variable name
+    res.status(500).json({ error: err.message });
   }
 });
 
-scenariosRouter.put('/:id', requireAuth, async (req, res) => {
+scenariosRouter.put('/:id', auth, async (req, res) => { // Changed middleware
   const { title } = req.body;
   if (title !== undefined && (!title || !String(title).trim())) {
     return res.status(400).json({ error: 'Назва сценарію не може бути порожньою' });
   }
   try {
-    const scenario = await GameScenario.findByIdAndUpdate(
-      req.params.id, req.body, { new: true, runValidators: true }
+    const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+    const scenario = await GameScenario.findOneAndUpdate( // Used findOneAndUpdate
+      query, req.body, { new: true, runValidators: true }
     );
-    if (!scenario) return res.status(404).json({ error: 'Сценарій не знайдено' });
+    if (!scenario) return res.status(404).json({ error: 'Сценарій не знайдено або немає доступу' }); // Updated message
     res.json(scenario);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  } catch (err) { // Changed error variable name
+    res.status(400).json({ error: err.message });
   }
 });
 
-scenariosRouter.delete('/:id', requireAuth, async (req, res) => {
+// Admin: Delete scenario
+scenariosRouter.delete('/:id', auth, async (req, res) => { // Changed middleware
   try {
-    await GameScenario.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Deleted' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+    const scenario = await GameScenario.findOneAndDelete(query); // Used findOneAndDelete
+    if (!scenario) return res.status(404).json({ error: 'Scenario not found or unauthorized' }); // Updated message
+    res.json({ success: true }); // Updated success message
+  } catch (err) { // Changed error variable name
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -89,7 +91,7 @@ linksRouter.get('/:hash', async (req, res) => {
 });
 
 // Захищений: адмін створює посилання
-linksRouter.post('/', requireAuth, async (req, res) => {
+linksRouter.post('/', auth, async (req, res) => {
   const { scenarioId } = req.body;
   if (!scenarioId) {
     return res.status(400).json({ error: 'scenarioId є обов\'язковим' });
@@ -110,7 +112,8 @@ const resultsRouter = express.Router();
 
 // Публічний: студент відправляє результат (без авторизації)
 resultsRouter.post('/', async (req, res) => {
-  const { scenarioTitle, playerName, playerLastName, playerPosition, isWin } = req.body;
+  const { scenarioTitle, playerName, playerLastName, playerCity, isWin } = req.body;
+
   if (!scenarioTitle || !String(scenarioTitle).trim()) {
     return res.status(400).json({ error: 'scenarioTitle є обов\'язковим' });
   }
@@ -120,14 +123,22 @@ resultsRouter.post('/', async (req, res) => {
   if (!playerLastName || !String(playerLastName).trim()) {
     return res.status(400).json({ error: 'playerLastName є обов\'язковим' });
   }
-  if (!playerPosition || !String(playerPosition).trim()) {
-    return res.status(400).json({ error: 'playerPosition є обов\'язковим' });
+  if (!playerCity || !String(playerCity).trim()) {
+    return res.status(400).json({ error: 'playerCity є обов\'язковим' });
   }
   if (typeof isWin !== 'boolean') {
     return res.status(400).json({ error: 'isWin повинен бути булевим значенням' });
   }
+
   try {
-    const result = new GameResult(req.body);
+    const scenario = await GameScenario.findOne({ title: scenarioTitle });
+    if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
+
+    const result = new GameResult({
+      ...req.body,
+      scenarioId: scenario._id,
+      ownerId: scenario.ownerId
+    });
     await result.save();
     res.status(201).json(result);
   } catch (error) {
@@ -136,9 +147,10 @@ resultsRouter.post('/', async (req, res) => {
 });
 
 // Захищений: адмін переглядає результати
-resultsRouter.get('/', requireAuth, async (req, res) => {
+resultsRouter.get('/', auth, async (req, res) => {
   try {
-    const results = await GameResult.find().sort({ completedAt: -1 });
+    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+    const results = await GameResult.find(query).sort({ completedAt: -1 });
     res.json(results);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -1,18 +1,21 @@
 const express = require('express');
 const DeskTemplate = require('../models/DeskTemplate');
-const requireAuth = require('../middleware/auth');
+const { auth } = require('../middleware/authMiddleware');
 const router = express.Router();
 
-router.get('/', requireAuth, async (req, res) => {
+// Get all templates
+router.get('/', auth, async (req, res) => {
   try {
-    const templates = await DeskTemplate.find();
+    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+    const templates = await DeskTemplate.find(query).sort({ createdAt: -1 });
     res.json(templates);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/', requireAuth, async (req, res) => {
+// Create template
+router.post('/', auth, async (req, res) => {
   const { name, items } = req.body;
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'Назва шаблону є обов\'язковою' });
@@ -21,40 +24,47 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'items повинен бути масивом' });
   }
   try {
-    const template = new DeskTemplate(req.body);
+    const template = new DeskTemplate({
+      ...req.body,
+      ownerId: req.user._id
+    });
     await template.save();
     res.status(201).json(template);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   const { name } = req.body;
   if (name !== undefined && (!name || typeof name !== 'string' || !name.trim())) {
     return res.status(400).json({ error: 'Назва шаблону не може бути порожньою' });
   }
   try {
-    const template = await DeskTemplate.findByIdAndUpdate(
-      req.params.id,
+    const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+    const template = await DeskTemplate.findOneAndUpdate(
+      query,
       req.body,
       { new: true, runValidators: true }
     );
     if (!template) {
-      return res.status(404).json({ error: 'Шаблон не знайдено' });
+      return res.status(404).json({ error: 'Шаблон не знайдено або немає доступу' });
     }
     res.json(template);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
-router.delete('/:id', requireAuth, async (req, res) => {
+// Delete template
+router.delete('/:id', auth, async (req, res) => {
   try {
-    await DeskTemplate.findByIdAndDelete(req.params.id);
+    const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+    const template = await DeskTemplate.findOneAndDelete(query);
+    if (!template) return res.status(404).json({ error: 'Template not found or unauthorized' });
     res.json({ message: 'Template deleted' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
