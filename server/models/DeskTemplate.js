@@ -10,6 +10,7 @@ const deskTemplateSchema = new mongoose.Schema({
     type: { type: String }
   }],
   timeLimit: { type: Number, default: 0 },
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -26,7 +26,7 @@ const StudentTest = () => {
     const [studentInfo, setStudentInfo] = useState({
         firstName: '',
         lastName: '',
-        position: ''
+        city: ''
     });
 
     const [timeLeft, setTimeLeft] = useState(null);
@@ -76,7 +76,7 @@ const StudentTest = () => {
 
     const handleRegister = (e) => {
         e.preventDefault();
-        if (studentInfo.firstName && studentInfo.lastName && studentInfo.position) {
+        if (studentInfo.firstName && studentInfo.lastName && studentInfo.city) {
             setIsRegistered(true);
         } else {
             alert('Будь ласка, заповніть усі поля');
@@ -114,7 +114,7 @@ const StudentTest = () => {
             items: items.map(({ type, x, y }) => ({ type, x, y })),
             studentName: studentInfo.firstName,
             studentLastName: studentInfo.lastName,
-            studentPosition: studentInfo.position,
+            studentCity: studentInfo.city,
         };
 
         try {
@@ -169,12 +169,12 @@ const StudentTest = () => {
                             />
                         </div>
                         <div className="form-group">
-                            <label>Посада</label>
+                            <label>Місто</label>
                             <input
                                 type="text"
-                                value={studentInfo.position}
-                                onChange={(e) => setStudentInfo({ ...studentInfo, position: e.target.value })}
-                                placeholder="Введіть посаду"
+                                value={studentInfo.city}
+                                onChange={(e) => setStudentInfo({ ...studentInfo, city: e.target.value })}
+                                placeholder="Введіть місто"
                                 required
                             />
                         </div>
@@ -192,7 +192,7 @@ const StudentTest = () => {
             <header className="desk-header">
                 <div className="header-info">
                     <h1>🍽️ {testData.templateId.name}</h1>
-                    <p>{studentInfo.firstName} {studentInfo.lastName} · {studentInfo.position}</p>
+                    <p>{studentInfo.firstName} {studentInfo.lastName} · {studentInfo.city}</p>
                 </div>
                 <div className="header-actions">
                     {timeLeft !== null && !testResult && (

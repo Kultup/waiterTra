@@ -6,6 +6,7 @@ const deskItemSchema = new mongoose.Schema({
   x: { type: Number, required: true },
   y: { type: Number, required: true },
   type: { type: String, default: 'note' },
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now }
 });
 

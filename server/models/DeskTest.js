@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const deskTestSchema = new mongoose.Schema({
   templateId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeskTemplate', required: true },
   hash: { type: String, required: true, unique: true },
+  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now }
 });
 

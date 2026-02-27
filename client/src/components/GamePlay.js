@@ -6,19 +6,20 @@ import './GamePlay.css';
 
 const GamePlay = () => {
     const { hash } = useParams();
-    const [scenario, setScenario]           = useState(null);
+    const [scenario, setScenario] = useState(null);
     const [currentNodeId, setCurrentNodeId] = useState(null);
-    const [endResult, setEndResult]         = useState(null);
-    const [history, setHistory]             = useState([]);
-    const [animKey, setAnimKey]             = useState(0);
-    const [loading, setLoading]             = useState(true);
+    const [endResult, setEndResult] = useState(null);
+    const [history, setHistory] = useState([]);
+    const [choicePath, setChoicePath] = useState([]);
+    const [animKey, setAnimKey] = useState(0);
+    const [loading, setLoading] = useState(true);
 
     // ── Registration ─────────────────────────────────────────────
     const [isRegistered, setIsRegistered] = useState(false);
-    const [playerInfo, setPlayerInfo]     = useState({
+    const [playerInfo, setPlayerInfo] = useState({
         firstName: '',
-        lastName:  '',
-        position:  '',
+        lastName: '',
+        city: '',
     });
 
     useEffect(() => {
@@ -41,31 +42,34 @@ const GamePlay = () => {
 
     const handleRegister = (e) => {
         e.preventDefault();
-        if (playerInfo.firstName && playerInfo.lastName && playerInfo.position) {
+        if (playerInfo.firstName && playerInfo.lastName && playerInfo.city) {
             setIsRegistered(true);
         }
     };
 
     const handleChoice = async (choice) => {
+        // Track the choice path for error analysis
+        const nodeText = currentNode?.text ? currentNode.text.substring(0, 80) : '';
+        setChoicePath(prev => [...prev, { nodeText, choiceText: choice.text }]);
         setHistory(prev => [...prev, currentNodeId]);
         setAnimKey(k => k + 1);
 
         if (!choice.nextNodeId) {
             setEndResult({ isWin: choice.isWin, result: choice.result, choiceText: choice.text });
 
-            // Зберегти результат гри
             const endingTitle = choice.result
                 ? choice.result.split('\n')[0].trim()
                 : '';
             try {
                 await axios.post(`${API_URL}/game-results`, {
                     hash,
-                    scenarioTitle:  scenario.title,
-                    playerName:     playerInfo.firstName,
+                    scenarioTitle: scenario.title,
+                    playerName: playerInfo.firstName,
                     playerLastName: playerInfo.lastName,
-                    playerPosition: playerInfo.position,
+                    playerCity: playerInfo.city,
                     endingTitle,
                     isWin: choice.isWin,
+                    choicePath: [...choicePath, { nodeText: nodeText, choiceText: choice.text }],
                 });
             } catch (err) {
                 console.error('saveGameResult:', err);
@@ -89,6 +93,7 @@ const GamePlay = () => {
         setCurrentNodeId(scenario.startNodeId);
         setEndResult(null);
         setHistory([]);
+        setChoicePath([]);
         setAnimKey(k => k + 1);
     };
 
@@ -132,12 +137,12 @@ const GamePlay = () => {
                             />
                         </div>
                         <div className="game-reg-field">
-                            <label>Посада</label>
+                            <label>Місто</label>
                             <input
                                 type="text"
-                                value={playerInfo.position}
-                                onChange={e => setPlayerInfo({ ...playerInfo, position: e.target.value })}
-                                placeholder="Введіть посаду"
+                                value={playerInfo.city}
+                                onChange={e => setPlayerInfo({ ...playerInfo, city: e.target.value })}
+                                placeholder="Введіть місто"
                                 required
                             />
                         </div>

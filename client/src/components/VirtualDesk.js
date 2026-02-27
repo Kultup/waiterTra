@@ -39,6 +39,7 @@ const VirtualDesk = () => {
     const [templateName, setTemplateName] = useState('');
     const [timeLimit, setTimeLimit] = useState(0);
     const [copyStatus, setCopyStatus] = useState(null);
+    const [multiCopyStatus, setMultiCopyStatus] = useState(false);
     const [templatesOpen, setTemplatesOpen] = useState(true);
 
     const [modalConfig, setModalConfig] = useState({
@@ -52,16 +53,24 @@ const VirtualDesk = () => {
 
     const fetchItems = async () => {
         try {
-            const res = await axios.get(`${API_URL}/desk-items`);
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/desk-items`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             setItems(res.data || []);
         } catch (e) { console.error(e); }
     };
 
     const fetchTemplates = async () => {
         try {
-            const res = await axios.get(`${API_URL}/templates`);
-            setTemplates(res.data || []);
-        } catch (e) { console.error(e); }
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/templates`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setTemplates(res.data);
+        } catch (err) {
+            console.error('Fetch error:', err);
+        }
     };
 
     const handleDeskClick = async (e) => {
@@ -69,8 +78,11 @@ const VirtualDesk = () => {
         const x = ((e.clientX - rect.left) / rect.width) * 500;
         const y = ((e.clientY - rect.top) / rect.height) * 500;
         try {
+            const token = localStorage.getItem('token');
             const res = await axios.post(`${API_URL}/desk-items`, {
                 name: selectedDish.name, icon: selectedDish.icon, x, y, type: selectedDish.id
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
             setItems(prev => [...prev, res.data]);
         } catch (e) { console.error(e); }
@@ -79,7 +91,10 @@ const VirtualDesk = () => {
     const handleDeleteItem = async (e, id) => {
         e.stopPropagation();
         try {
-            await axios.delete(`${API_URL}/desk-items/${id}`);
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/desk-items/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             setItems(prev => prev.filter(i => i._id !== id));
         } catch (e) { console.error(e); }
     };
@@ -100,6 +115,9 @@ const VirtualDesk = () => {
     const handleConfirmModal = async () => {
         const { type, data } = modalConfig;
         try {
+            const token = localStorage.getItem('token');
+            const config = { headers: { Authorization: `Bearer ${token}` } };
+
             if (type === 'save') {
                 if (!templateName.trim()) { alert('Введіть назву шаблону'); return; }
                 const payload = {
@@ -108,9 +126,9 @@ const VirtualDesk = () => {
                     timeLimit
                 };
                 if (editingTemplateId) {
-                    await axios.put(`${API_URL}/templates/${editingTemplateId}`, payload);
+                    await axios.put(`${API_URL}/templates/${editingTemplateId}`, payload, config);
                 } else {
-                    await axios.post(`${API_URL}/templates`, payload);
+                    await axios.post(`${API_URL}/templates`, payload, config);
                 }
                 setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
                 fetchTemplates();
@@ -123,17 +141,17 @@ const VirtualDesk = () => {
                 } else {
                     setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
                 }
-                await Promise.all(items.map(i => axios.delete(`${API_URL}/desk-items/${i._id}`)));
-                const newItems = await Promise.all(template.items.map(i => axios.post(`${API_URL}/desk-items`, i)));
+                await Promise.all(items.map(i => axios.delete(`${API_URL}/desk-items/${i._id}`, config)));
+                const newItems = await Promise.all(template.items.map(i => axios.post(`${API_URL}/desk-items`, i, config)));
                 setItems(newItems.map(r => r.data));
             } else if (type === 'delete') {
-                await axios.delete(`${API_URL}/templates/${data}`);
+                await axios.delete(`${API_URL}/templates/${data}`, config);
                 setTemplates(prev => prev.filter(t => t._id !== data));
                 if (editingTemplateId === data) {
                     setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
                 }
             } else if (type === 'clear') {
-                await Promise.all(items.map(i => axios.delete(`${API_URL}/desk-items/${i._id}`)));
+                await Promise.all(items.map(i => axios.delete(`${API_URL}/desk-items/${i._id}`, config)));
                 setItems([]);
                 setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
             }
@@ -146,7 +164,10 @@ const VirtualDesk = () => {
     };
 
     const generateTestUrl = async (templateId) => {
-        const res = await axios.post(`${API_URL}/tests`, { templateId });
+        const token = localStorage.getItem('token');
+        const res = await axios.post(`${API_URL}/tests`, { templateId }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
         return `${window.location.origin}/test/${res.data.hash}`;
     };
 
@@ -164,6 +185,22 @@ const VirtualDesk = () => {
             const url = await generateTestUrl(templateId);
             window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent('Запрошую пройти тест по сервіруванню столу!')}`, '_blank');
         } catch (e) { alert('Помилка'); }
+    };
+
+    const handleCopyAllLink = async () => {
+        if (templates.length === 0) { alert('Немає збережених шаблонів'); return; }
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/tests/multi`, {
+                templateIds: templates.map(t => t._id)
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const url = `${window.location.origin}/multi-test/${res.data.hash}`;
+            await navigator.clipboard.writeText(url);
+            setMultiCopyStatus(true);
+            setTimeout(() => setMultiCopyStatus(false), 3000);
+        } catch (e) { alert('Помилка при створенні посилання'); }
     };
 
     return (
@@ -254,6 +291,15 @@ const VirtualDesk = () => {
                         <span>Шаблони</span>
                         <span className="templates-toggle">{templatesOpen ? '▲' : '▼'}</span>
                     </div>
+                    {templates.length > 0 && templatesOpen && (
+                        <button
+                            className={`btn-all-link ${multiCopyStatus ? 'copied' : ''}`}
+                            onClick={handleCopyAllLink}
+                            title="Створити посилання на проходження всіх сервіровок"
+                        >
+                            {multiCopyStatus ? '✓ Скопійовано!' : '🔗 Посилання на всі столи'}
+                        </button>
+                    )}
                     {templatesOpen && (
                         <div className="templates-list">
                             {templates.length === 0 ? (

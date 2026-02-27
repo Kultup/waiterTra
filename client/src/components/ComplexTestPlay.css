@@ -1,0 +1,372 @@
+/* ═══════════════════════════════════════════════════════════
+   COMPLEX TEST PLAY — Student sequential test
+   ═══════════════════════════════════════════════════════════ */
+
+.complex-play {
+    min-height: 100vh;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Stepper (reusing multi-desk stepper pattern) ──────── */
+
+.complex-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.cs-step {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.cs-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.cs-circle.active {
+    border-color: var(--accent-blue);
+    background: rgba(56, 189, 248, 0.15);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+
+.cs-circle.done {
+    border-color: #4ade80;
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
+}
+
+.cs-line {
+    width: 32px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.08);
+    transition: background 0.3s;
+}
+
+.cs-line.done {
+    background: #4ade80;
+}
+
+/* ── Step content ────────────────────────────────────────── */
+
+.complex-step-header {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.complex-step-header h2 {
+    margin: 0 0 0.3rem;
+    font-size: 1.4rem;
+}
+
+.complex-step-header p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.complex-step-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    animation: fadeInUp 0.3s ease;
+}
+
+/* ── Game play embed ─────────────────────────────────────── */
+
+.game-embed {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 680px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.game-node {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 1rem;
+}
+
+.game-speaker {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.game-speaker-avatar {
+    font-size: 1.5rem;
+}
+
+.game-speaker-name {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.game-text {
+    font-size: 1.05rem;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+.game-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.game-choice-btn {
+    width: 100%;
+    padding: 0.85rem 1.2rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    color: #fff;
+    font-size: 0.95rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.game-choice-btn:hover {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: var(--accent-blue);
+    transform: translateX(4px);
+}
+
+.game-ending {
+    text-align: center;
+    padding: 2rem;
+}
+
+.game-ending h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.game-ending p {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+}
+
+/* ── Quiz embed ──────────────────────────────────────────── */
+
+.quiz-embed {
+    max-width: 680px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.quiz-progress-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.quiz-progress-fill {
+    height: 100%;
+    background: var(--accent-blue);
+    border-radius: 2px;
+    transition: width 0.3s;
+}
+
+.quiz-question-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 2rem;
+}
+
+.quiz-q-number {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.75rem;
+}
+
+.quiz-q-text {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.quiz-q-image {
+    max-width: 100%;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.quiz-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.quiz-option {
+    padding: 0.85rem 1.2rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.95rem;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.quiz-option:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.quiz-option.selected {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: var(--accent-blue);
+}
+
+.quiz-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+}
+
+/* ── Complex summary ─────────────────────────────────────── */
+
+.complex-summary {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 2rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    backdrop-filter: blur(20px);
+    animation: fadeInUp 0.4s ease;
+}
+
+.complex-summary h2 {
+    text-align: center;
+    margin: 0 0 1.5rem;
+    font-size: 1.6rem;
+}
+
+.complex-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+
+.complex-summary-table th,
+.complex-summary-table td {
+    padding: 0.75rem 0.8rem;
+    text-align: left;
+    font-size: 0.88rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.complex-summary-table th {
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+
+.complex-summary-table .row-pass td {
+    color: #4ade80;
+}
+
+.complex-summary-table .row-fail td {
+    color: #f87171;
+}
+
+.complex-overall {
+    text-align: center;
+    padding: 1.5rem 0 1rem;
+}
+
+.complex-overall-score {
+    font-size: 3rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+
+.complex-overall-status {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 700px) {
+    .complex-play {
+        padding: 0.75rem;
+    }
+
+    .cs-circle {
+        width: 30px;
+        height: 30px;
+        font-size: 0.75rem;
+    }
+
+    .cs-line {
+        width: 18px;
+    }
+
+    .complex-summary {
+        padding: 1.25rem;
+    }
+
+    .complex-overall-score {
+        font-size: 2.2rem;
+    }
+
+    .game-node {
+        padding: 1.25rem;
+    }
+
+    .quiz-question-card {
+        padding: 1.25rem;
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

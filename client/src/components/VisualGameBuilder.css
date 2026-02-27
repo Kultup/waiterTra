@@ -1,0 +1,379 @@
+/* VisualGameBuilder.css */
+:root {
+    --n8n-bg: #121212;
+    --n8n-node-bg: #1e1e1e;
+    --n8n-node-border: #333;
+    --n8n-accent: #ff6d5a;
+    /* n8n orange */
+    --n8n-blue: #38bdf8;
+    --n8n-text: #e5e7eb;
+    --n8n-text-muted: #9ca3af;
+    --n8n-grid: radial-gradient(circle, #333 1px, transparent 1px);
+}
+
+.visual-builder-container {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--n8n-bg);
+    color: var(--n8n-text);
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* Header */
+.vb-header {
+    height: 60px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--n8n-node-border);
+    background: #181818;
+    z-index: 100;
+}
+
+.vb-title-input {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+    outline: none;
+    width: 300px;
+}
+
+.vb-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.vb-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    border: 1px solid transparent;
+}
+
+.vb-btn-primary {
+    background: var(--n8n-accent);
+    color: white;
+}
+
+.vb-btn-primary:hover {
+    background: #ff8575;
+}
+
+.vb-btn-secondary {
+    background: #2a2a2a;
+    color: white;
+    border-color: #444;
+}
+
+.vb-btn-secondary:hover {
+    background: #333;
+}
+
+/* Main Area */
+.vb-main {
+    flex: 1;
+    display: flex;
+    position: relative;
+}
+
+/* Canvas */
+.vb-canvas {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background-image: var(--n8n-grid);
+    /* background-size is now handled dynamically in JS */
+}
+
+.vb-canvas-content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform-origin: 0 0;
+    pointer-events: none;
+    /* Let clicks pass to canvas for panning */
+}
+
+.vb-canvas-content>* {
+    pointer-events: auto;
+    /* Re-enable for nodes */
+}
+
+/* SVG Connections */
+.vb-connections-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: visible;
+}
+
+.vb-link-path {
+    fill: none;
+    stroke: #555;
+    stroke-width: 2px;
+    transition: stroke 0.2s;
+}
+
+.vb-link-path.active {
+    stroke: var(--n8n-accent);
+    stroke-width: 3px;
+}
+
+/* Node Styling */
+.vb-node {
+    position: absolute;
+    width: 220px;
+    background: var(--n8n-node-bg);
+    border: 1px solid var(--n8n-node-border);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    cursor: grab;
+    z-index: 5;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.vb-node:active {
+    cursor: grabbing;
+}
+
+.vb-node.selected {
+    border-color: var(--n8n-accent);
+    box-shadow: 0 0 0 2px rgba(255, 109, 90, 0.3), 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+.vb-node.start-node {
+    border-left: 4px solid var(--n8n-blue);
+}
+
+.vb-node-header {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid #2a2a2a;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 12px 12px 0 0;
+}
+
+.vb-node-icon {
+    font-size: 1.2rem;
+}
+
+.vb-node-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--n8n-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.vb-node-content {
+    padding: 12px 14px;
+}
+
+.vb-node-text {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: #fff;
+}
+
+/* Ports */
+.vb-port {
+    width: 12px;
+    height: 12px;
+    background: #444;
+    border: 2px solid var(--n8n-node-bg);
+    border-radius: 50%;
+    position: absolute;
+    z-index: 10;
+}
+
+.vb-port-in {
+    left: -7px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.vb-port-out {
+    right: -7px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--n8n-accent);
+}
+
+/* Sidebar */
+.vb-sidebar {
+    width: 360px;
+    background: #181818;
+    border-left: 1px solid var(--n8n-node-border);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+}
+
+.vb-sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--n8n-node-border);
+}
+
+.vb-sidebar-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.vb-form-group {
+    margin-bottom: 20px;
+}
+
+.vb-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--n8n-text-muted);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.vb-input,
+.vb-textarea,
+.vb-select {
+    width: 100%;
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: white;
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.vb-input:focus,
+.vb-textarea:focus,
+.vb-select:focus {
+    border-color: var(--n8n-accent);
+}
+
+/* Floating Actions */
+.vb-floating-actions {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    padding: 10px 20px;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 40px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    z-index: 50;
+}
+
+.vb-float-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.vb-float-btn:hover {
+    opacity: 1;
+}
+
+.vb-float-btn i {
+    font-size: 1.2rem;
+}
+
+/* Tabs */
+.vb-tabs {
+    background: #252525;
+    padding: 4px;
+    border-radius: 8px;
+    display: flex;
+    gap: 4px;
+}
+
+.vb-tab-btn {
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.vb-tab-btn:hover {
+    color: #ccc;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.vb-tab-btn.active {
+    color: white;
+    background: #333;
+}
+
+/* Node Speaker */
+.vb-node-speaker {
+    position: absolute;
+    top: -15px;
+    left: -15px;
+    width: 40px;
+    height: 40px;
+    background: #252525;
+    border: 2px solid var(--n8n-node-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    z-index: 10;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+.vb-node.selected .vb-node-speaker {
+    border-color: var(--n8n-accent);
+}
+
+.vb-characters-view {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}

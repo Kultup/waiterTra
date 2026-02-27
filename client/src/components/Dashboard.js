@@ -3,7 +3,7 @@ import axios from 'axios';
 import API_URL from '../api';
 import './Dashboard.css';
 
-const Dashboard = () => {
+const Dashboard = ({ user }) => {
     const [stats, setStats] = useState([
         { label: 'Активні тести', value: '—', icon: '📝', color: '#00d2ff' },
         { label: 'Готові результати', value: '—', icon: '✅', color: '#4caf50' },
@@ -13,10 +13,13 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchStats = async () => {
             try {
+                const token = localStorage.getItem('token');
+                const config = { headers: { Authorization: `Bearer ${token}` } };
+
                 const [testsRes, resultsRes, templatesRes] = await Promise.all([
-                    axios.get(`${API_URL}/tests`),
-                    axios.get(`${API_URL}/test-results`),
-                    axios.get(`${API_URL}/templates`),
+                    axios.get(`${API_URL}/tests`, config),
+                    axios.get(`${API_URL}/test-results`, config),
+                    axios.get(`${API_URL}/templates`, config),
                 ]);
                 setStats([
                     { label: 'Активні тести', value: String(testsRes.data.length), icon: '📝', color: '#00d2ff' },
@@ -33,8 +36,8 @@ const Dashboard = () => {
     return (
         <div className="dashboard">
             <header className="dashboard-header">
-                <h1>Вітаємо в ServIQ</h1>
-                <p>Платформа навчання та оцінки персоналу</p>
+                <h1>Вітаємо, {user?.username || 'в ServIQ'}</h1>
+                <p>Ви ввійшли як <strong>{user?.role}</strong>. Платформа навчання та оцінки персоналу</p>
             </header>
 
             <div className="stats-grid">
