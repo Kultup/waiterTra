@@ -9,7 +9,8 @@ const userSchema = new mongoose.Schema({
         enum: ['superadmin', 'admin', 'trainer', 'viewer'],
         default: 'admin'
     },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    isBlocked: { type: Boolean, default: false }
 });
 
 module.exports = mongoose.model('User', userSchema);

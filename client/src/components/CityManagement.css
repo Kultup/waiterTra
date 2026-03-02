@@ -1,0 +1,95 @@
+.city-management-container {
+    padding: 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.city-header {
+    margin-bottom: 2rem;
+}
+
+.city-header h2 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.city-header p {
+    color: #888;
+}
+
+.add-city-section {
+    background: #1a1a1a;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #333;
+    margin-bottom: 2rem;
+}
+
+.add-city-form {
+    display: flex;
+    gap: 1rem;
+}
+
+.add-city-form input {
+    flex: 1;
+    background: #222;
+    border: 1px solid #444;
+    color: white;
+    padding: 0.8rem 1rem;
+    border-radius: 8px;
+    font-size: 1rem;
+}
+
+.add-city-form input:focus {
+    outline: none;
+    border-color: #38bdf8;
+}
+
+.cities-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.city-card {
+    background: #1a1a1a;
+    padding: 1rem 1.5rem;
+    border-radius: 10px;
+    border: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.city-card:hover {
+    border-color: #444;
+    transform: translateY(-2px);
+}
+
+.city-name {
+    font-weight: 500;
+}
+
+.btn-delete-city {
+    background: transparent;
+    border: none;
+    color: #666;
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 0.5rem;
+    transition: color 0.2s;
+}
+
+.btn-delete-city:hover {
+    color: #f87171;
+}
+
+.empty-msg {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #666;
+    padding: 2rem;
+}

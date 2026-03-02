@@ -12,16 +12,10 @@ const complexTestSchema = new mongoose.Schema({
     title: { type: String, required: true },
     description: { type: String, default: '' },
     steps: [complexStepSchema],
-    hash: { type: String, unique: true },
+    isUsed: { type: Boolean, default: false },
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    targetCity: { type: String, default: '' },
     createdAt: { type: Date, default: Date.now }
-});
-
-complexTestSchema.pre('save', function (next) {
-    if (!this.hash) {
-        this.hash = crypto.randomBytes(8).toString('hex');
-    }
-    next();
 });
 
 module.exports = mongoose.model('ComplexTest', complexTestSchema);

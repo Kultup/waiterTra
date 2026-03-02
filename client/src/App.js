@@ -6,9 +6,6 @@ import Dashboard from './components/Dashboard.js';
 import VirtualDesk from './components/VirtualDesk.js';
 import StudentTest from './components/StudentTest.js';
 import TestResults from './components/TestResults.js';
-import GameBuilder from './components/GameBuilder.js';
-import GamePlay from './components/GamePlay.js';
-import Login from './components/Login.js';
 import VisualGameBuilder from './components/VisualGameBuilder.js';
 import QuizBuilder from './components/QuizBuilder.js';
 import QuizPlay from './components/QuizPlay.js';
@@ -16,6 +13,10 @@ import UserManager from './components/UserManager.js';
 import MultiDeskTest from './components/MultiDeskTest.js';
 import ComplexTestBuilder from './components/ComplexTestBuilder.js';
 import ComplexTestPlay from './components/ComplexTestPlay.js';
+import InactiveTest from './components/InactiveTest.js';
+import CityManagement from './components/CityManagement.js';
+import Login from './components/Login.js';
+import GamePlay from './components/GamePlay.js';
 
 function AdminPanel({ onLogout, user }) {
   const navigate = useNavigate();
@@ -41,9 +42,9 @@ function AdminPanel({ onLogout, user }) {
           <Route index element={<Dashboard user={user} />} />
           <Route path="dashboard" element={<Dashboard user={user} />} />
           <Route path="users" element={user?.role === 'superadmin' ? <UserManager /> : <Dashboard user={user} />} />
+          <Route path="cities" element={user?.role === 'superadmin' ? <CityManagement /> : <Dashboard user={user} />} />
           <Route path="virtual-desk" element={['superadmin', 'admin'].includes(user?.role) ? <VirtualDesk /> : <Dashboard user={user} />} />
-          <Route path="test-results" element={<TestResults />} />
-          <Route path="game-builder" element={['superadmin', 'admin'].includes(user?.role) ? <GameBuilder /> : <Dashboard user={user} />} />
+          <Route path="test-results" element={<TestResults user={user} />} />
           <Route path="visual-builder" element={['superadmin', 'admin', 'trainer'].includes(user?.role) ? <VisualGameBuilder /> : <Dashboard user={user} />} />
           <Route path="quiz-builder" element={['superadmin', 'admin', 'trainer'].includes(user?.role) ? <QuizBuilder /> : <Dashboard user={user} />} />
           <Route path="complex-builder" element={['superadmin', 'admin'].includes(user?.role) ? <ComplexTestBuilder /> : <Dashboard user={user} />} />
@@ -84,6 +85,7 @@ function App() {
         <Route path="/quiz/:hash" element={<QuizPlay />} />
         <Route path="/multi-test/:hash" element={<MultiDeskTest />} />
         <Route path="/complex/:hash" element={<ComplexTestPlay />} />
+        <Route path="/inactive" element={<InactiveTest />} />
         <Route
           path="/*"
           element={

@@ -15,11 +15,12 @@ router.post('/multi', auth, async (req, res) => {
     return res.status(400).json({ error: 'templateIds повинен бути непорожнім масивом' });
   }
   try {
-    const hash = crypto.randomBytes(8).toString('hex');
+    const hash = crypto.randomBytes(16).toString('hex');
     const test = new MultiDeskTest({
       templateIds,
       hash,
-      ownerId: req.user._id
+      ownerId: req.user._id,
+      targetCity: req.body.targetCity || ''
     });
     await test.save();
     res.status(201).json(test);
@@ -32,9 +33,14 @@ router.post('/multi', auth, async (req, res) => {
 router.get('/multi/:hash', async (req, res) => {
   try {
     const test = await MultiDeskTest.findOne({ hash: req.params.hash })
-      .populate('templateIds');
+      .populate('templateIds')
+      .populate('ownerId', 'city');
     if (!test) return res.status(404).json({ error: 'Тест не знайдено' });
-    res.json(test);
+    if (test.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
+
+    const response = test.toObject();
+    response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
+    res.json(response);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -42,7 +48,7 @@ router.get('/multi/:hash', async (req, res) => {
 
 // Public: submit multi-desk test results
 router.post('/multi/:hash/submit', async (req, res) => {
-  const { studentName, studentLastName, studentCity, results } = req.body;
+  const { studentName, studentLastName, studentCity, studentPosition, results } = req.body;
   if (!studentName || !studentLastName || !studentCity) {
     return res.status(400).json({ error: 'Дані студента є обов\'язковими' });
   }
@@ -53,6 +59,10 @@ router.post('/multi/:hash/submit', async (req, res) => {
     const test = await MultiDeskTest.findOne({ hash: req.params.hash })
       .populate('templateIds');
     if (!test) return res.status(404).json({ error: 'Тест не знайдено' });
+    if (test.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
+
+    test.isUsed = true;
+    await test.save();
 
     const tolerance = 50;
     const stepResults = [];
@@ -86,6 +96,7 @@ router.post('/multi/:hash/submit', async (req, res) => {
         studentName: String(studentName).trim(),
         studentLastName: String(studentLastName).trim(),
         studentCity: String(studentCity).trim(),
+        studentPosition: String(studentPosition || '').trim(),
         score, total, percentage, passed
       });
       await result.save();
@@ -102,11 +113,17 @@ router.post('/multi/:hash/submit', async (req, res) => {
 // Студент отримує тест за hash (без авторизації)
 router.get('/:hash', async (req, res) => {
   try {
-    const test = await DeskTest.findOne({ hash: req.params.hash }).populate('templateId');
+    const test = await DeskTest.findOne({ hash: req.params.hash })
+      .populate('templateId')
+      .populate('ownerId', 'city');
     if (!test) {
       return res.status(404).json({ error: 'Тест не знайдено' });
     }
-    res.json(test);
+    if (test.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
+
+    const response = test.toObject();
+    response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
+    res.json(response);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -114,7 +131,7 @@ router.get('/:hash', async (req, res) => {
 
 // Студент відправляє відповіді — серверне оцінювання
 router.post('/:hash/submit', async (req, res) => {
-  const { items, studentName, studentLastName, studentCity } = req.body;
+  const { items, studentName, studentLastName, studentCity, studentPosition } = req.body;
 
   if (!Array.isArray(items)) {
     return res.status(400).json({ error: 'items повинен бути масивом' });
@@ -134,6 +151,10 @@ router.post('/:hash/submit', async (req, res) => {
     if (!test) {
       return res.status(404).json({ error: 'Тест не знайдено' });
     }
+    if (test.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
+
+    test.isUsed = true;
+    await test.save();
 
     const targetItems = test.templateId.items;
     const tolerance = 50;
@@ -168,6 +189,7 @@ router.post('/:hash/submit', async (req, res) => {
       studentName: String(studentName).trim(),
       studentLastName: String(studentLastName).trim(),
       studentCity: String(studentCity).trim(),
+      studentPosition: String(studentPosition || '').trim(),
       score,
       total,
       percentage,
@@ -191,11 +213,12 @@ router.post('/', auth, async (req, res) => {
     return res.status(400).json({ error: 'templateId є обов\'язковим' });
   }
   try {
-    const hash = crypto.randomBytes(8).toString('hex');
+    const hash = crypto.randomBytes(16).toString('hex');
     const test = new DeskTest({
       templateId,
       hash,
-      ownerId: req.user._id
+      ownerId: req.user._id,
+      targetCity: req.body.targetCity || ''
     });
     await test.save();
     res.status(201).json(test);

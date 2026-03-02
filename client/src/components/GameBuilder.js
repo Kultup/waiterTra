@@ -4,18 +4,18 @@ import API_URL from '../api';
 import './GameBuilder.css';
 
 // ── ID generators ────────────────────────────────────────────────────────────
-const genNodeId   = () => `n_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+const genNodeId = () => `n_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 const genChoiceId = () => `c_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-const genCharId   = () => `ch_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+const genCharId = () => `ch_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
 // ── Presets ──────────────────────────────────────────────────────────────────
 const AVATAR_PRESETS = [
-    '🧑‍🍳','👨‍🍳','👩‍🍳','🤵','👰','👨‍💼','👩‍💼','🧑‍💼',
-    '👮','🧑‍🎓','👨‍🎓','👩‍🎓','🧙','🦸','🦹','🤖','😊','👤'
+    '🧑‍🍳', '👨‍🍳', '👩‍🍳', '🤵', '👰', '👨‍💼', '👩‍💼', '🧑‍💼',
+    '👮', '🧑‍🎓', '👨‍🎓', '👩‍🎓', '🧙', '🦸', '🦹', '🤖', '😊', '👤'
 ];
 const COLOR_PRESETS = [
-    '#38bdf8','#4caf50','#ff9800','#ef4444',
-    '#a855f7','#ec4899','#14b8a6','#f59e0b'
+    '#38bdf8', '#4caf50', '#ff9800', '#ef4444',
+    '#a855f7', '#ec4899', '#14b8a6', '#f59e0b'
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -45,15 +45,39 @@ const emptyCharForm = () => ({ charId: null, name: '', avatar: '🧑', color: '#
 
 // ── GameBuilder ──────────────────────────────────────────────────────────────
 const GameBuilder = () => {
-    const [scenarios, setScenarios]   = useState([]);
-    const [editing, setEditing]       = useState(null);
+    const [scenarios, setScenarios] = useState([]);
+    const [editing, setEditing] = useState(null);
     const [selectedNodeId, setSelected] = useState(null);
-    const [activeTab, setActiveTab]   = useState('nodes');   // 'nodes' | 'characters'
-    const [charForm, setCharForm]     = useState(null);      // null = hidden
+    const [activeTab, setActiveTab] = useState('nodes');   // 'nodes' | 'characters'
+    const [charForm, setCharForm] = useState(null);      // null = hidden
     const [copyStatus, setCopyStatus] = useState(null);
-    const [saving, setSaving]         = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [user, setUser] = useState(null);
+    const [cities, setCities] = useState([]);
+    const [filterCity, setFilterCity] = useState('');
 
-    useEffect(() => { fetchScenarios(); }, []);
+    useEffect(() => {
+        fetchUser();
+        fetchCities();
+        fetchScenarios();
+    }, []);
+
+    const fetchUser = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUser(res.data);
+        } catch (e) { console.error('fetchUser:', e); }
+    };
+
+    const fetchCities = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/cities`);
+            setCities(res.data);
+        } catch (e) { console.error('fetchCities:', e); }
+    };
 
     const fetchScenarios = async () => {
         try {
@@ -91,17 +115,17 @@ const GameBuilder = () => {
         setSaving(true);
         try {
             const payload = {
-                title:       editing.title,
+                title: editing.title,
                 description: editing.description,
                 startNodeId: editing.startNodeId,
-                characters:  editing.characters.map(({ charId, name, avatar, color, description }) =>
+                characters: editing.characters.map(({ charId, name, avatar, color, description }) =>
                     ({ charId, name, avatar, color, description })
                 ),
                 nodes: editing.nodes.map(n => ({
-                    nodeId:    n.nodeId,
-                    text:      n.text,
+                    nodeId: n.nodeId,
+                    text: n.text,
                     speakerId: n.speakerId || null,
-                    choices:   n.choices.map(({ text, nextNodeId, isWin, result }) =>
+                    choices: n.choices.map(({ text, nextNodeId, isWin, result }) =>
                         ({ text, nextNodeId: nextNodeId || null, isWin, result })
                     )
                 }))
@@ -563,21 +587,43 @@ const GameBuilder = () => {
     // ════════════════════════════════════════════════════════════════════════
     // SCENARIO LIST VIEW
     // ════════════════════════════════════════════════════════════════════════
+    const filteredScenarios = scenarios.filter(s => !filterCity || s.targetCity === filterCity);
+
     return (
         <div className="game-builder-container">
-            <div className="content-header">
+            <div className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
                 <h2>🎮 Ігрові сценарії</h2>
-                <button className="btn-add" onClick={openNew}>+ Новий сценарій</button>
+                <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {user?.role === 'superadmin' && (
+                        <div className="city-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <span style={{ fontSize: '0.8rem', color: '#aaa' }}>📍 Фільтр міста:</span>
+                            <select
+                                value={filterCity}
+                                onChange={e => setFilterCity(e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', cursor: 'pointer', fontSize: '0.9rem' }}
+                            >
+                                <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                {cities.map(c => (
+                                    <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    <button className="btn-add" onClick={openNew}>+ Новий сценарій</button>
+                </div>
             </div>
-            {scenarios.length === 0 ? (
+            {filteredScenarios.length === 0 ? (
                 <div className="placeholder-view"><p>Немає сценаріїв. Створіть перший!</p></div>
             ) : (
                 <div className="scenarios-grid">
-                    {scenarios.map(scenario => (
+                    {filteredScenarios.map(scenario => (
                         <div key={scenario._id} className="scenario-card">
-                            <div className="scenario-card-header">
-                                <h3>{scenario.title}</h3>
-                                {copyStatus === scenario._id && <span className="copy-confirm">✓ Скопійовано</span>}
+                            <div className="scenario-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {scenario.title}
+                                    {scenario.targetCity && <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 'normal', whiteSpace: 'nowrap' }}>📍 {scenario.targetCity}</span>}
+                                </h3>
+                                {copyStatus === scenario._id && <span className="copy-confirm">✓</span>}
                             </div>
                             {scenario.description && <p className="scenario-description">{scenario.description}</p>}
                             <div className="scenario-card-footer">

@@ -38,6 +38,10 @@ const VirtualDesk = () => {
     const [editingTemplateId, setEditingTemplateId] = useState(null);
     const [templateName, setTemplateName] = useState('');
     const [timeLimit, setTimeLimit] = useState(0);
+    const [targetCity, setTargetCity] = useState('');
+    const [cities, setCities] = useState([]);
+    const [filterCity, setFilterCity] = useState('');
+    const [user, setUser] = useState(null);
     const [copyStatus, setCopyStatus] = useState(null);
     const [multiCopyStatus, setMultiCopyStatus] = useState(false);
     const [templatesOpen, setTemplatesOpen] = useState(true);
@@ -47,9 +51,21 @@ const VirtualDesk = () => {
     });
 
     useEffect(() => {
+        fetchUser();
         fetchItems();
         fetchTemplates();
+        fetchCities();
     }, []);
+
+    const fetchUser = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUser(res.data);
+        } catch (e) { console.error(e); }
+    };
 
     const fetchItems = async () => {
         try {
@@ -71,6 +87,13 @@ const VirtualDesk = () => {
         } catch (err) {
             console.error('Fetch error:', err);
         }
+    };
+
+    const fetchCities = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/cities`);
+            setCities(res.data);
+        } catch (err) { console.error(err); }
     };
 
     const handleDeskClick = async (e) => {
@@ -104,7 +127,11 @@ const VirtualDesk = () => {
     };
 
     const handleSaveTemplateClick = () => {
-        if (!editingTemplateId) { setTemplateName(''); setTimeLimit(0); }
+        if (!editingTemplateId) {
+            setTemplateName('');
+            setTimeLimit(0);
+            setTargetCity('');
+        }
         setModalConfig({
             show: true,
             title: editingTemplateId ? 'Оновити шаблон' : 'Зберегти як шаблон',
@@ -123,14 +150,15 @@ const VirtualDesk = () => {
                 const payload = {
                     name: templateName.trim(),
                     items: items.map(({ name, icon, x, y, type }) => ({ name, icon, x, y, type })),
-                    timeLimit
+                    timeLimit,
+                    targetCity: user?.role === 'superadmin' ? targetCity : undefined
                 };
                 if (editingTemplateId) {
                     await axios.put(`${API_URL}/templates/${editingTemplateId}`, payload, config);
                 } else {
                     await axios.post(`${API_URL}/templates`, payload, config);
                 }
-                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
+                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
                 fetchTemplates();
             } else if (type === 'load' || type === 'edit') {
                 const template = data;
@@ -138,8 +166,9 @@ const VirtualDesk = () => {
                     setEditingTemplateId(template._id);
                     setTemplateName(template.name);
                     setTimeLimit(template.timeLimit || 0);
+                    setTargetCity(template.targetCity || '');
                 } else {
-                    setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
+                    setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
                 }
                 await Promise.all(items.map(i => axios.delete(`${API_URL}/desk-items/${i._id}`, config)));
                 const newItems = await Promise.all(template.items.map(i => axios.post(`${API_URL}/desk-items`, i, config)));
@@ -148,12 +177,11 @@ const VirtualDesk = () => {
                 await axios.delete(`${API_URL}/templates/${data}`, config);
                 setTemplates(prev => prev.filter(t => t._id !== data));
                 if (editingTemplateId === data) {
-                    setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
+                    setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
                 }
             } else if (type === 'clear') {
-                await Promise.all(items.map(i => axios.delete(`${API_URL}/desk-items/${i._id}`, config)));
                 setItems([]);
-                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
+                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
             }
         } catch (e) {
             console.error(e);
@@ -164,8 +192,12 @@ const VirtualDesk = () => {
     };
 
     const generateTestUrl = async (templateId) => {
+        const template = templates.find(t => t._id === templateId);
         const token = localStorage.getItem('token');
-        const res = await axios.post(`${API_URL}/tests`, { templateId }, {
+        const res = await axios.post(`${API_URL}/tests`, {
+            templateId,
+            targetCity: template?.targetCity || ''
+        }, {
             headers: { Authorization: `Bearer ${token}` }
         });
         return `${window.location.origin}/test/${res.data.hash}`;
@@ -192,7 +224,8 @@ const VirtualDesk = () => {
         try {
             const token = localStorage.getItem('token');
             const res = await axios.post(`${API_URL}/tests/multi`, {
-                templateIds: templates.map(t => t._id)
+                templateIds: templates.map(t => t._id),
+                targetCity: '' // Multi-links are usually global, or handle accordingly
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -210,7 +243,7 @@ const VirtualDesk = () => {
             <header className="desk-header">
                 <div className="header-info">
                     <h1>
-                        {editingTemplateId ? `✏️ ${templateName}` : 'Віртуальний стіл'}
+                        {editingTemplateId ? `✏️ ${templateName}` : '🍽️ Сервірування'}
                     </h1>
                     <p>
                         {editingTemplateId
@@ -218,6 +251,23 @@ const VirtualDesk = () => {
                             : `На столі: ${items.length} предмет${items.length === 1 ? '' : items.length < 5 ? 'и' : 'ів'}`}
                     </p>
                 </div>
+
+                {user?.role === 'superadmin' && (
+                    <div className="header-city-selector" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <span style={{ fontSize: '0.8rem', color: '#888' }}>📍 Місто:</span>
+                        <select
+                            value={targetCity}
+                            onChange={(e) => setTargetCity(e.target.value)}
+                            style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '0.9rem', outline: 'none', cursor: 'pointer' }}
+                        >
+                            <option value="" style={{ color: '#000' }}>Всі міста</option>
+                            {cities.map(c => (
+                                <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 <div className="header-actions">
                     {items.length > 0 && (
                         <button className="btn-header-ghost" onClick={handleClearDesk}>
@@ -301,39 +351,60 @@ const VirtualDesk = () => {
                         </button>
                     )}
                     {templatesOpen && (
-                        <div className="templates-list">
-                            {templates.length === 0 ? (
-                                <p className="empty-msg">Немає збережених шаблонів</p>
-                            ) : (
-                                templates.map(t => (
-                                    <div
-                                        key={t._id}
-                                        className={`template-card ${editingTemplateId === t._id ? 'active' : ''}`}
-                                        onClick={() => setModalConfig({ show: true, title: 'Завантажити шаблон', type: 'load', data: t })}
+                        <div className="templates-list-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            {user?.role === 'superadmin' && (
+                                <div className="city-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '10px' }}>
+                                    <span style={{ fontSize: '0.75rem', color: '#aaa', whiteSpace: 'nowrap' }}>📍 Місто:</span>
+                                    <select
+                                        value={filterCity}
+                                        onChange={e => setFilterCity(e.target.value)}
+                                        style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', cursor: 'pointer', fontSize: '0.85rem', width: '100%' }}
                                     >
-                                        <div className="tpl-main">
-                                            <span className="tpl-icon">📋</span>
-                                            <div className="tpl-info">
-                                                <span className="tpl-name">{t.name}</span>
-                                                <span className="tpl-meta">
-                                                    {t.items?.length || 0} предм.
-                                                    {t.timeLimit > 0 && ` · ⏱ ${t.timeLimit} хв`}
-                                                </span>
+                                        <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                        {cities.map(c => (
+                                            <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            <div className="templates-list" style={{ overflowY: 'auto', flex: 1, paddingRight: '2px' }}>
+                                {(() => {
+                                    const filteredTemplates = templates.filter(t => !filterCity || t.targetCity === filterCity);
+                                    if (filteredTemplates.length === 0) {
+                                        return <p className="empty-msg">Немає збережених шаблонів</p>;
+                                    }
+                                    return filteredTemplates.map(t => (
+                                        <div
+                                            key={t._id}
+                                            className={`template-card ${editingTemplateId === t._id ? 'active' : ''}`}
+                                            onClick={() => setModalConfig({ show: true, title: 'Завантажити шаблон', type: 'load', data: t })}
+                                        >
+                                            <div className="tpl-main">
+                                                <span className="tpl-icon">📋</span>
+                                                <div className="tpl-info">
+                                                    <span className="tpl-name">{t.name}</span>
+                                                    <span className="tpl-meta">
+                                                        {t.items?.length || 0} предм.
+                                                        {t.timeLimit > 0 && ` · ⏱ ${t.timeLimit} хв`}
+                                                        {t.targetCity && <span style={{ marginLeft: '8px', color: '#38bdf8' }}>📍 {t.targetCity}</span>}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="tpl-actions">
+                                                {copyStatus === t._id ? (
+                                                    <span className="copied-label">✓</span>
+                                                ) : (
+                                                    <button className="tpl-btn" title="Скопіювати посилання" onClick={e => { e.stopPropagation(); handleCopyLink(t._id); }}>📋</button>
+                                                )}
+                                                <button className="tpl-btn" title="Telegram" onClick={e => { e.stopPropagation(); handleShareTelegram(t._id); }}>✈️</button>
+                                                <button className="tpl-btn" title="Редагувати" onClick={e => { e.stopPropagation(); setModalConfig({ show: true, title: 'Редагувати шаблон', type: 'edit', data: t }); }}>✏️</button>
+                                                <button className="tpl-btn tpl-btn-delete" title="Видалити" onClick={e => { e.stopPropagation(); setModalConfig({ show: true, title: 'Видалити шаблон', type: 'delete', data: t._id }); }}>×</button>
                                             </div>
                                         </div>
-                                        <div className="tpl-actions">
-                                            {copyStatus === t._id ? (
-                                                <span className="copied-label">✓</span>
-                                            ) : (
-                                                <button className="tpl-btn" title="Скопіювати посилання" onClick={e => { e.stopPropagation(); handleCopyLink(t._id); }}>📋</button>
-                                            )}
-                                            <button className="tpl-btn" title="Telegram" onClick={e => { e.stopPropagation(); handleShareTelegram(t._id); }}>✈️</button>
-                                            <button className="tpl-btn" title="Редагувати" onClick={e => { e.stopPropagation(); setModalConfig({ show: true, title: 'Редагувати шаблон', type: 'edit', data: t }); }}>✏️</button>
-                                            <button className="tpl-btn tpl-btn-delete" title="Видалити" onClick={e => { e.stopPropagation(); setModalConfig({ show: true, title: 'Видалити шаблон', type: 'delete', data: t._id }); }}>×</button>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
+                                    ));
+                                })()}
+                            </div>
                         </div>
                     )}
                 </aside>
@@ -367,6 +438,20 @@ const VirtualDesk = () => {
                                 min="0"
                             />
                         </div>
+                        {user?.role === 'superadmin' && (
+                            <div className="form-group">
+                                <label>Призначити місту (залиште порожнім для всіх)</label>
+                                <select
+                                    value={targetCity}
+                                    onChange={e => setTargetCity(e.target.value)}
+                                >
+                                    <option value="">Всі міста</option>
+                                    {cities.map(c => (
+                                        <option key={c._id} value={c.name}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
                 ) : modalConfig.type === 'load' ? (
                     <p>Завантажити шаблон "<strong>{modalConfig.data?.name}</strong>"? Поточний стіл буде очищено.</p>

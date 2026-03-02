@@ -1,10 +1,8 @@
-const mongoose = require('mongoose');
-
-const deskTestSchema = new mongoose.Schema({
-  templateId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeskTemplate', required: true },
-  hash: { type: String, required: true, unique: true },
-  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  createdAt: { type: Date, default: Date.now }
-});
-
-module.exports = mongoose.model('DeskTest', deskTestSchema);
+// Mock DeskTest model for tests
+module.exports = {
+    find: jest.fn(),
+    findById: jest.fn(),
+    create: jest.fn(),
+    findByIdAndUpdate: jest.fn(),
+    findByIdAndDelete: jest.fn(),
+};

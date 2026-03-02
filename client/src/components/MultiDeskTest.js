@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import './VirtualDesk.css';
 import './MultiDeskTest.css';
 import API_URL from '../api';
@@ -16,12 +16,13 @@ const dishList = [
 
 const MultiDeskTest = () => {
     const { hash } = useParams();
+    const navigate = useNavigate();
     const [testData, setTestData] = useState(null);
     const [loading, setLoading] = useState(true);
 
     // Registration
     const [isRegistered, setIsRegistered] = useState(false);
-    const [studentInfo, setStudentInfo] = useState({ firstName: '', lastName: '', city: '' });
+    const [studentInfo, setStudentInfo] = useState({ firstName: '', lastName: '', city: '', position: '' });
 
     // Step state
     const [currentStep, setCurrentStep] = useState(0);
@@ -43,8 +44,14 @@ const MultiDeskTest = () => {
             try {
                 const res = await axios.get(`${API_URL}/tests/multi/${hash}`);
                 setTestData(res.data);
+                if (res.data.city) {
+                    setStudentInfo(prev => ({ ...prev, city: res.data.city }));
+                }
             } catch (err) {
                 console.error('Error fetching multi-test:', err);
+                if (err.response?.status === 410) {
+                    navigate('/inactive');
+                }
             } finally {
                 setLoading(false);
             }
@@ -79,7 +86,7 @@ const MultiDeskTest = () => {
 
     const handleRegister = (e) => {
         e.preventDefault();
-        if (studentInfo.firstName && studentInfo.lastName && studentInfo.city) {
+        if (studentInfo.firstName && studentInfo.lastName && studentInfo.position) {
             setIsRegistered(true);
         } else {
             alert('Будь ласка, заповніть усі поля');
@@ -153,6 +160,7 @@ const MultiDeskTest = () => {
                     studentName: studentInfo.firstName,
                     studentLastName: studentInfo.lastName,
                     studentCity: studentInfo.city,
+                    studentPosition: studentInfo.position,
                     results: stepResults.map(r => ({ items: r.items }))
                 });
                 setServerResults(res.data.stepResults);
@@ -188,9 +196,32 @@ const MultiDeskTest = () => {
                         </div>
                         <div className="form-group">
                             <label>Місто</label>
-                            <input type="text" value={studentInfo.city}
-                                onChange={e => setStudentInfo({ ...studentInfo, city: e.target.value })}
-                                placeholder="Введіть місто" required />
+                            <input
+                                type="text"
+                                value={studentInfo.city || '—'}
+                                disabled
+                                style={{
+                                    width: '100%',
+                                    padding: '12px 15px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #333',
+                                    background: '#1a1a1a',
+                                    color: '#fff',
+                                    fontSize: '1rem',
+                                    opacity: 0.7,
+                                    cursor: 'not-allowed'
+                                }}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Посада</label>
+                            <input
+                                type="text"
+                                value={studentInfo.position}
+                                onChange={e => setStudentInfo({ ...studentInfo, position: e.target.value })}
+                                placeholder="Введіть посаду"
+                                required
+                            />
                         </div>
                         <button type="submit" className="btn-save-template" style={{ width: '100%', marginTop: '1rem' }}>
                             Почати тест
@@ -236,9 +267,6 @@ const MultiDeskTest = () => {
                             {allPassed ? '✅ Всі сервіровки пройдено!' : '❌ Деякі сервіровки не пройдено'}
                         </p>
                     </div>
-                    <button className="btn-save-template" onClick={() => window.location.reload()}>
-                        Повторити
-                    </button>
                 </div>
             </div>
         );

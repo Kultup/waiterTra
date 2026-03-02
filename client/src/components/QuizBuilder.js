@@ -9,10 +9,25 @@ const QuizBuilder = () => {
     const [collapsedQuestions, setCollapsedQuestions] = useState(new Set());
     const [copyStatus, setCopyStatus] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [user, setUser] = useState(null);
+    const [cities, setCities] = useState([]);
+    const [filterCity, setFilterCity] = useState('');
 
     useEffect(() => {
+        fetchUser();
         fetchQuizzes();
+        fetchCities();
     }, []);
+
+    const fetchUser = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUser(res.data);
+        } catch (e) { console.error(e); }
+    };
 
     const fetchQuizzes = async () => {
         try {
@@ -26,19 +41,27 @@ const QuizBuilder = () => {
         }
     };
 
+    const fetchCities = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/cities`);
+            setCities(res.data);
+        } catch (err) { console.error(err); }
+    };
+
     const handleNewQuiz = () => {
         setEditing({
             title: '',
             description: '',
             timeLimit: 0,
             passingScore: 80,
-            questions: [{ text: '', options: ['', '', '', ''], correctIndex: 0, image: '' }]
+            targetCity: '',
+            questions: [{ text: '', options: ['', '', '', ''], correctIndex: 0, image: '', video: '', explanation: '' }]
         });
         setCollapsedQuestions(new Set());
     };
 
     const addQuestion = () => {
-        const newQs = [...editing.questions, { text: '', options: ['', '', '', ''], correctIndex: 0, image: '' }];
+        const newQs = [...editing.questions, { text: '', options: ['', '', '', ''], correctIndex: 0, image: '', video: '', explanation: '' }];
         setEditing({ ...editing, questions: newQs });
         // New question is expanded
         const newCollapsed = new Set(collapsedQuestions);
@@ -74,7 +97,6 @@ const QuizBuilder = () => {
         const newQs = [...editing.questions];
         newQs[index][field] = value;
         setEditing({ ...editing, questions: newQs });
-        if (field === 'text') checkAutoCollapse(index, newQs[index]);
     };
 
     const addOption = (qIdx) => {
@@ -87,7 +109,6 @@ const QuizBuilder = () => {
         const newQs = [...editing.questions];
         newQs[qIdx].options[oIdx] = value;
         setEditing({ ...editing, questions: newQs });
-        checkAutoCollapse(qIdx, newQs[qIdx]);
     };
 
     const removeOption = (qIdx, oIdx) => {
@@ -99,6 +120,26 @@ const QuizBuilder = () => {
         setEditing({ ...editing, questions: newQs });
     };
 
+    const handleFileUpload = async (qIdx, field, file) => {
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/upload`, formData, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            updateQuestion(qIdx, field, res.data.url);
+        } catch (err) {
+            console.error('handleFileUpload:', err);
+            alert('Помилка при завантаженні файлу');
+        }
+    };
+
     const handleSave = async () => {
         if (!editing.title.trim()) { alert('Введіть назву квізу'); return; }
         setSaving(true);
@@ -106,10 +147,14 @@ const QuizBuilder = () => {
             const token = localStorage.getItem('token');
             const config = { headers: { Authorization: `Bearer ${token}` } };
 
+            const payload = {
+                ...editing,
+                targetCity: user?.role === 'superadmin' ? editing.targetCity : undefined
+            };
             if (editing._id) {
-                await axios.put(`${API_URL}/quiz/${editing._id}`, editing, config);
+                await axios.put(`${API_URL}/quiz/${editing._id}`, payload, config);
             } else {
-                await axios.post(`${API_URL}/quiz`, editing, config);
+                await axios.post(`${API_URL}/quiz`, payload, config);
             }
             fetchQuizzes();
             setEditing(null);
@@ -134,11 +179,20 @@ const QuizBuilder = () => {
         }
     };
 
-    const handleCopyLink = (hash) => {
-        const url = `${window.location.origin}/quiz/${hash}`;
-        navigator.clipboard.writeText(url);
-        setCopyStatus(hash);
-        setTimeout(() => setCopyStatus(null), 2000);
+    const handleCopyLink = async (quizId) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/quiz/links`, { quizId }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const url = `${window.location.origin}/quiz/${res.data.hash}`;
+            await navigator.clipboard.writeText(url);
+            setCopyStatus(quizId);
+            setTimeout(() => setCopyStatus(null), 2000);
+        } catch (err) {
+            console.error('handleCopyLink:', err);
+            alert('Помилка при створенні посилання');
+        }
     };
 
     if (editing) {
@@ -153,6 +207,22 @@ const QuizBuilder = () => {
                             onChange={e => setEditing({ ...editing, title: e.target.value })}
                             placeholder="Назва квізу..."
                         />
+                        {user?.role === 'superadmin' && (
+                            <div className="qb-city-field" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                                <span style={{ color: '#888', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>📍 Місто:</span>
+                                <select
+                                    className="qb-input"
+                                    style={{ width: '200px', background: 'transparent', border: '1px solid #444', height: '32px', color: '#fff' }}
+                                    value={editing.targetCity || ''}
+                                    onChange={e => setEditing({ ...editing, targetCity: e.target.value })}
+                                >
+                                    <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                    {cities.map(c => (
+                                        <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                     </div>
                     <div className="qb-header-actions">
                         <button className="qb-btn qb-btn-secondary" onClick={() => setEditing(null)}>Скасувати</button>
@@ -225,14 +295,49 @@ const QuizBuilder = () => {
                                                 placeholder="Текст питання..."
                                             />
 
+                                            <div className="qb-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                                                <div className="qb-section">
+                                                    <label className="qb-label" style={{ fontSize: '0.75rem' }}>Зображення</label>
+                                                    <div className="file-upload-wrapper" style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <input
+                                                            className="qb-input"
+                                                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                                                            value={q.image || ''}
+                                                            onChange={e => updateQuestion(qIdx, 'image', e.target.value)}
+                                                            placeholder="URL або завантажте файл..."
+                                                        />
+                                                        <label className="file-upload-btn" style={{ background: '#333', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                            📁
+                                                            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleFileUpload(qIdx, 'image', e.target.files[0])} />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                <div className="qb-section">
+                                                    <label className="qb-label" style={{ fontSize: '0.75rem' }}>Відео</label>
+                                                    <div className="file-upload-wrapper" style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <input
+                                                            className="qb-input"
+                                                            style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
+                                                            value={q.video || ''}
+                                                            onChange={e => updateQuestion(qIdx, 'video', e.target.value)}
+                                                            placeholder="URL або завантажте файл..."
+                                                        />
+                                                        <label className="file-upload-btn" style={{ background: '#333', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                            📁
+                                                            <input type="file" accept="video/*" style={{ display: 'none' }} onChange={e => handleFileUpload(qIdx, 'video', e.target.files[0])} />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             <div className="qb-section" style={{ marginBottom: '1rem' }}>
-                                                <label className="qb-label" style={{ fontSize: '0.75rem' }}>URL Зображення (необов'язково)</label>
-                                                <input
-                                                    className="qb-input"
-                                                    style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem' }}
-                                                    value={q.image || ''}
-                                                    onChange={e => updateQuestion(qIdx, 'image', e.target.value)}
-                                                    placeholder="https://example.com/image.jpg"
+                                                <label className="qb-label" style={{ fontSize: '0.75rem' }}>Пояснення правильної відповіді</label>
+                                                <textarea
+                                                    className="qb-textarea"
+                                                    style={{ minHeight: '60px', padding: '0.5rem', fontSize: '0.85rem' }}
+                                                    value={q.explanation || ''}
+                                                    onChange={e => updateQuestion(qIdx, 'explanation', e.target.value)}
+                                                    placeholder="Чому ця відповідь є правильною..."
                                                 />
                                             </div>
 
@@ -269,28 +374,52 @@ const QuizBuilder = () => {
         );
     }
 
+    const filteredQuizzes = quizzes.filter(q =>
+        !filterCity || q.targetCity === filterCity
+    );
+
     return (
         <div className="quiz-builder">
-            <header className="quiz-header">
+            <header className="quiz-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
                 <div>
                     <h1>Квізи (Тести)</h1>
                     <p>Керуйте текстовими тестами для персоналу</p>
                 </div>
-                <button className="qb-btn qb-btn-primary" onClick={handleNewQuiz}>+ Створити квіз</button>
+                <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {user?.role === 'superadmin' && (
+                        <div className="city-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <span style={{ fontSize: '0.8rem', color: '#aaa' }}>📍 Фільтр міста:</span>
+                            <select
+                                value={filterCity}
+                                onChange={e => setFilterCity(e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', cursor: 'pointer', fontSize: '0.9rem' }}
+                            >
+                                <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                {cities.map(c => (
+                                    <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    <button className="qb-btn qb-btn-primary" onClick={handleNewQuiz}>+ Створити квіз</button>
+                </div>
             </header>
 
             <div className="quiz-grid">
-                {quizzes.length === 0 ? (
+                {filteredQuizzes.length === 0 ? (
                     <div className="qb-empty">
                         <span className="qb-empty-icon">📝</span>
                         <h3>Немає створених квізів</h3>
                         <p>Натисніть кнопку вище, щоб створити свій перший тест</p>
                     </div>
                 ) : (
-                    quizzes.map(quiz => (
+                    filteredQuizzes.map(quiz => (
                         <div key={quiz._id} className="quiz-card">
                             <div className="quiz-card-content">
-                                <h3>{quiz.title}</h3>
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    {quiz.title}
+                                    {quiz.targetCity && <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 'normal', whiteSpace: 'nowrap' }}>📍 {quiz.targetCity}</span>}
+                                </h3>
                                 <p>{quiz.description || 'Без опису'}</p>
                                 <div className="quiz-meta">
                                     <span>❓ {quiz.questions.length} питань</span>
@@ -298,8 +427,8 @@ const QuizBuilder = () => {
                                 </div>
                             </div>
                             <div className="quiz-card-actions">
-                                <button className="qb-btn qb-btn-secondary" onClick={() => handleCopyLink(quiz.hash)}>
-                                    {copyStatus === quiz.hash ? '✓ Скопійовано' : '🔗 Посилання'}
+                                <button className="qb-btn qb-btn-secondary" onClick={() => handleCopyLink(quiz._id)}>
+                                    {copyStatus === quiz._id ? '✓ Скопійовано' : '🔗 Посилання'}
                                 </button>
                                 <button className="qb-btn-icon" onClick={() => setEditing(quiz)} title="Редагувати">✏️</button>
                                 <button className="qb-btn-icon delete" onClick={() => handleDelete(quiz._id)} title="Видалити">🗑️</button>

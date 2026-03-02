@@ -8,9 +8,12 @@ const UserManager = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [newUser, setNewUser] = useState({ username: '', password: '', role: 'admin', city: '' });
+    const [editingUser, setEditingUser] = useState(null);
+    const [cities, setCities] = useState([]);
 
     useEffect(() => {
         fetchUsers();
+        fetchCities();
     }, []);
 
     const fetchUsers = async () => {
@@ -24,6 +27,15 @@ const UserManager = () => {
         } catch (err) {
             setError('Failed to fetch users');
             setLoading(false);
+        }
+    };
+
+    const fetchCities = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/cities`);
+            setCities(res.data);
+        } catch (err) {
+            console.error('Failed to fetch cities:', err);
         }
     };
 
@@ -51,6 +63,32 @@ const UserManager = () => {
             fetchUsers();
         } catch (err) {
             setError('Failed to delete user');
+        }
+    };
+
+    const handleToggleBlock = async (id) => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.patch(`${API_URL}/auth/users/${id}/block`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchUsers();
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to toggle block status');
+        }
+    };
+
+    const handleUpdateUser = async (e) => {
+        e.preventDefault();
+        try {
+            const token = localStorage.getItem('token');
+            await axios.put(`${API_URL}/auth/users/${editingUser._id}`, editingUser, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setEditingUser(null);
+            fetchUsers();
+        } catch (err) {
+            setError(err.response?.data?.error || 'Failed to update user');
         }
     };
 
@@ -112,12 +150,15 @@ const UserManager = () => {
                         onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                         required
                     />
-                    <input
-                        type="text"
-                        placeholder="Місто"
+                    <select
                         value={newUser.city}
                         onChange={(e) => setNewUser({ ...newUser, city: e.target.value })}
-                    />
+                    >
+                        <option value="">Виберіть місто...</option>
+                        {cities.map(c => (
+                            <option key={c._id} value={c.name}>{c.name}</option>
+                        ))}
+                    </select>
                     <select
                         value={newUser.role}
                         onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
@@ -149,12 +190,27 @@ const UserManager = () => {
                                 <td><span className={`role-badge ${u.role}`}>{u.role}</span></td>
                                 <td>
                                     {u.role !== 'superadmin' && (
-                                        <button
-                                            className="btn-delete"
-                                            onClick={() => handleDeleteUser(u._id)}
-                                        >
-                                            Видалити
-                                        </button>
+                                        <div className="user-actions">
+                                            <button
+                                                className="btn-edit"
+                                                onClick={() => setEditingUser({ ...u, password: '' })}
+                                            >
+                                                ✏️
+                                            </button>
+                                            <button
+                                                className={`btn-block ${u.isBlocked ? 'blocked' : ''}`}
+                                                onClick={() => handleToggleBlock(u._id)}
+                                                title={u.isBlocked ? 'Розблокувати' : 'Заблокувати'}
+                                            >
+                                                {u.isBlocked ? '🔓' : '🚫'}
+                                            </button>
+                                            <button
+                                                className="btn-delete"
+                                                onClick={() => handleDeleteUser(u._id)}
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
                                     )}
                                 </td>
                             </tr>
@@ -162,6 +218,60 @@ const UserManager = () => {
                     </tbody>
                 </table>
             </section>
+            {editingUser && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h3>Редагувати користувача</h3>
+                        <form onSubmit={handleUpdateUser} className="edit-user-form">
+                            <div className="form-group">
+                                <label>Логін</label>
+                                <input
+                                    type="text"
+                                    value={editingUser.username}
+                                    onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Новий пароль (залиште порожнім, якщо не хочете змінювати)</label>
+                                <input
+                                    type="password"
+                                    value={editingUser.password}
+                                    onChange={(e) => setEditingUser({ ...editingUser, password: e.target.value })}
+                                    placeholder="Введіть новий пароль"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label>Місто</label>
+                                <select
+                                    value={editingUser.city}
+                                    onChange={(e) => setEditingUser({ ...editingUser, city: e.target.value })}
+                                >
+                                    <option value="">Виберіть місто...</option>
+                                    {cities.map(c => (
+                                        <option key={c._id} value={c.name}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>Роль</label>
+                                <select
+                                    value={editingUser.role}
+                                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                                >
+                                    <option value="admin">Admin</option>
+                                    <option value="trainer">Trainer</option>
+                                    <option value="viewer">Viewer</option>
+                                </select>
+                            </div>
+                            <div className="modal-actions">
+                                <button type="submit" className="btn-save">Зберегти</button>
+                                <button type="button" className="btn-cancel" onClick={() => setEditingUser(null)}>Скасувати</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

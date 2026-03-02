@@ -12,8 +12,16 @@ const scenariosRouter = express.Router();
 // Admin: Get all scenarios
 scenariosRouter.get('/', auth, async (req, res) => {
   try {
-    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
-    const scenarios = await GameScenario.find(query, 'title description createdAt').sort({ createdAt: -1 }); // Added query and sort
+    let query = {};
+    if (req.user.role !== 'superadmin') {
+      query = {
+        $or: [
+          { ownerId: req.user._id },
+          { targetCity: req.user.city, targetCity: { $ne: '' } }
+        ]
+      };
+    }
+    const scenarios = await GameScenario.find(query, 'title description targetCity createdAt').sort({ createdAt: -1 }); // Added query and sort
     res.json(scenarios);
   } catch (err) { // Changed error variable name
     res.status(500).json({ error: err.message });
@@ -82,9 +90,15 @@ const linksRouter = express.Router();
 // Публічний: студент отримує гру за hash (без авторизації)
 linksRouter.get('/:hash', async (req, res) => {
   try {
-    const link = await GameLink.findOne({ hash: req.params.hash }).populate('scenarioId');
+    const link = await GameLink.findOne({ hash: req.params.hash })
+      .populate('scenarioId')
+      .populate('ownerId', 'city');
     if (!link) return res.status(404).json({ error: 'Посилання не знайдено' });
-    res.json(link);
+    if (link.isUsed) return res.status(410).json({ error: 'Це посилання вже використано' });
+
+    const response = link.toObject();
+    response.city = link.scenarioId.targetCity || (link.ownerId ? link.ownerId.city : '');
+    res.json(response);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -97,8 +111,8 @@ linksRouter.post('/', auth, async (req, res) => {
     return res.status(400).json({ error: 'scenarioId є обов\'язковим' });
   }
   try {
-    const hash = crypto.randomBytes(8).toString('hex');
-    const link = new GameLink({ scenarioId, hash });
+    const hash = crypto.randomBytes(16).toString('hex');
+    const link = new GameLink({ scenarioId, hash, ownerId: req.user._id });
     await link.save();
     res.status(201).json(link);
   } catch (error) {
@@ -112,7 +126,7 @@ const resultsRouter = express.Router();
 
 // Публічний: студент відправляє результат (без авторизації)
 resultsRouter.post('/', async (req, res) => {
-  const { scenarioTitle, playerName, playerLastName, playerCity, isWin } = req.body;
+  const { scenarioTitle, playerName, playerLastName, playerCity, playerPosition, isWin, hash } = req.body;
 
   if (!scenarioTitle || !String(scenarioTitle).trim()) {
     return res.status(400).json({ error: 'scenarioTitle є обов\'язковим' });
@@ -140,6 +154,12 @@ resultsRouter.post('/', async (req, res) => {
       ownerId: scenario.ownerId
     });
     await result.save();
+
+    // Mark link as used if hash provided
+    if (hash) {
+      await GameLink.findOneAndUpdate({ hash }, { isUsed: true });
+    }
+
     res.status(201).json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });

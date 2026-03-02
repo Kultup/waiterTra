@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import API_URL from '../api';
 import './GamePlay.css';
 
 const GamePlay = () => {
     const { hash } = useParams();
+    const navigate = useNavigate();
     const [scenario, setScenario] = useState(null);
     const [currentNodeId, setCurrentNodeId] = useState(null);
     const [endResult, setEndResult] = useState(null);
@@ -19,7 +20,7 @@ const GamePlay = () => {
     const [playerInfo, setPlayerInfo] = useState({
         firstName: '',
         lastName: '',
-        city: '',
+        position: '',
     });
 
     useEffect(() => {
@@ -29,8 +30,14 @@ const GamePlay = () => {
                 const sc = res.data.scenarioId;
                 setScenario(sc);
                 setCurrentNodeId(sc.startNodeId);
+                if (res.data.city) {
+                    setPlayerInfo(prev => ({ ...prev, city: res.data.city }));
+                }
             } catch (err) {
                 console.error('fetchGame:', err);
+                if (err.response?.status === 410) {
+                    navigate('/inactive');
+                }
             } finally {
                 setLoading(false);
             }
@@ -38,11 +45,12 @@ const GamePlay = () => {
         fetchGame();
     }, [hash]);
 
+
     const currentNode = scenario?.nodes.find(n => n.nodeId === currentNodeId);
 
     const handleRegister = (e) => {
         e.preventDefault();
-        if (playerInfo.firstName && playerInfo.lastName && playerInfo.city) {
+        if (playerInfo.firstName && playerInfo.lastName && playerInfo.position) {
             setIsRegistered(true);
         }
     };
@@ -67,6 +75,7 @@ const GamePlay = () => {
                     playerName: playerInfo.firstName,
                     playerLastName: playerInfo.lastName,
                     playerCity: playerInfo.city,
+                    playerPosition: playerInfo.position,
                     endingTitle,
                     isWin: choice.isWin,
                     choicePath: [...choicePath, { nodeText: nodeText, choiceText: choice.text }],
@@ -86,14 +95,6 @@ const GamePlay = () => {
         setHistory(h => h.slice(0, -1));
         setCurrentNodeId(prev);
         setEndResult(null);
-        setAnimKey(k => k + 1);
-    };
-
-    const handleRestart = () => {
-        setCurrentNodeId(scenario.startNodeId);
-        setEndResult(null);
-        setHistory([]);
-        setChoicePath([]);
         setAnimKey(k => k + 1);
     };
 
@@ -140,9 +141,28 @@ const GamePlay = () => {
                             <label>Місто</label>
                             <input
                                 type="text"
-                                value={playerInfo.city}
-                                onChange={e => setPlayerInfo({ ...playerInfo, city: e.target.value })}
-                                placeholder="Введіть місто"
+                                value={playerInfo.city || '—'}
+                                disabled
+                                style={{
+                                    width: '100%',
+                                    padding: '12px 15px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #333',
+                                    background: '#1a1a1a',
+                                    color: '#fff',
+                                    fontSize: '1rem',
+                                    opacity: 0.7,
+                                    cursor: 'not-allowed'
+                                }}
+                            />
+                        </div>
+                        <div className="game-reg-field">
+                            <label>Посада</label>
+                            <input
+                                type="text"
+                                value={playerInfo.position}
+                                onChange={e => setPlayerInfo({ ...playerInfo, position: e.target.value })}
+                                placeholder="Введіть посаду"
                                 required
                             />
                         </div>
@@ -172,7 +192,6 @@ const GamePlay = () => {
                     {history.length > 0 && (
                         <button className="btn-back" onClick={handleBack}>← Назад</button>
                     )}
-                    <button className="btn-restart" onClick={handleRestart}>↺ Почати знову</button>
                 </div>
             </div>
         );
@@ -192,7 +211,7 @@ const GamePlay = () => {
                 <span className="game-title">{scenario.title}</span>
                 <div className="game-header-right">
                     <span className="game-player-name">
-                        {playerInfo.firstName} {playerInfo.lastName}
+                        {playerInfo.firstName} {playerInfo.lastName} · {playerInfo.city} ({playerInfo.position})
                     </span>
                     {history.length > 0 && (
                         <button className="btn-back-small" onClick={handleBack}>← Назад</button>
@@ -219,7 +238,6 @@ const GamePlay = () => {
                 {currentNode.choices.length === 0 ? (
                     <div className="no-choices-end">
                         <p>Кінець сцени</p>
-                        <button className="btn-restart" onClick={handleRestart}>↺ Почати знову</button>
                     </div>
                 ) : (
                     currentNode.choices.map((choice, idx) => (

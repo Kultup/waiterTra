@@ -6,7 +6,16 @@ const complexStepResultSchema = new mongoose.Schema({
     score: { type: Number, default: 0 },
     total: { type: Number, default: 0 },
     percentage: { type: Number, default: 0 },
-    passed: { type: Boolean, default: false }
+    passed: { type: Boolean, default: false },
+    answers: [{
+        questionText: String,
+        givenAnswer: String,
+        correctAnswer: String,
+        explanation: String,
+        image: String,
+        video: String,
+        isCorrect: Boolean
+    }]
 }, { _id: false });
 
 const complexTestResultSchema = new mongoose.Schema({
@@ -15,6 +24,7 @@ const complexTestResultSchema = new mongoose.Schema({
     studentName: { type: String, required: true },
     studentLastName: { type: String, required: true },
     studentCity: { type: String, required: true },
+    studentPosition: { type: String, default: '' },
     steps: [complexStepResultSchema],
     overallPassed: { type: Boolean, default: false },
     completedAt: { type: Date, default: Date.now }
