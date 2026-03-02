@@ -171,6 +171,7 @@
     gap: 1.5rem;
     min-height: 0;
     overflow: hidden;
+    flex-direction: row-reverse;
 }
 
 /* ── Nodes sidebar ──────────────────────────────────────────────────────── */

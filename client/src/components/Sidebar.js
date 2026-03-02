@@ -2,19 +2,28 @@ import React from 'react';
 import './Sidebar.css';
 
 const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user }) => {
-  const menuItems = [
+  // Основне меню
+  const mainMenu = [
     { id: 'dashboard', label: 'Панель', icon: '📊', roles: ['superadmin', 'admin', 'trainer', 'viewer'] },
-    { id: 'users', label: 'Користувачі', icon: '👥', roles: ['superadmin'] },
-    { id: 'virtual-desk', label: 'Віртуальний стіл', icon: '🖥️', roles: ['superadmin', 'admin'] },
-    { id: 'game-builder', label: 'Гра (Choice)', icon: '🎮', roles: ['superadmin', 'admin'] },
-    { id: 'visual-builder', label: 'Візуальний редактор', icon: '🗺️', roles: ['superadmin', 'admin', 'trainer'] },
-    { id: 'quiz-builder', label: 'Квіз (Тести)', icon: '📝', roles: ['superadmin', 'admin', 'trainer'] },
-    { id: 'complex-builder', label: 'Комплексний тест', icon: '🧩', roles: ['superadmin', 'admin'] },
     { id: 'test-results', label: 'Результати', icon: '✅', roles: ['superadmin', 'admin', 'trainer', 'viewer'] },
+  ];
+
+  // Створення тестів (тільки для адмінів та тренерів)
+  const createMenu = [
+    { id: 'virtual-desk', label: 'Сервірування', icon: '🖥️', roles: ['superadmin', 'admin'] },
+    { id: 'quiz-builder', label: 'Квіз (Тести)', icon: '📝', roles: ['superadmin', 'admin', 'trainer'] },
+    { id: 'visual-builder', label: 'Візуальний редактор', icon: '🗺️', roles: ['superadmin', 'admin', 'trainer'] },
+    { id: 'complex-builder', label: 'Комплексний тест', icon: '🧩', roles: ['superadmin', 'admin'] },
+  ];
+
+  // Управління (тільки superadmin)
+  const adminMenu = [
+    { id: 'users', label: 'Користувачі', icon: '👥', roles: ['superadmin'] },
+    { id: 'cities', label: 'Міста', icon: '🏙️', roles: ['superadmin'] },
     { id: 'settings', label: 'Налаштування', icon: '⚙️', roles: ['superadmin'] },
   ];
 
-  const filteredItems = menuItems.filter(item => !item.roles || item.roles.includes(user?.role));
+  const filterByRole = (items) => items.filter(item => !item.roles || item.roles.includes(user?.role));
 
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
@@ -22,8 +31,10 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user })
         <h2>ServIQ</h2>
         <button className="mobile-close" onClick={() => setIsOpen(false)}>×</button>
       </div>
+      
       <nav className="sidebar-nav">
-        {filteredItems.map((item) => (
+        {/* Основне меню */}
+        {filterByRole(mainMenu).map((item) => (
           <div
             key={item.id}
             className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
@@ -36,7 +47,48 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user })
             <span className="nav-label">{item.label}</span>
           </div>
         ))}
+
+        {/* Розділ "Створення тестів" */}
+        {filterByRole(createMenu).length > 0 && (
+          <>
+            <div className="nav-section-title">Створення тестів</div>
+            {filterByRole(createMenu).map((item) => (
+              <div
+                key={item.id}
+                className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (window.innerWidth <= 768) setIsOpen(false);
+                }}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-label">{item.label}</span>
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* Розділ "Управління" */}
+        {filterByRole(adminMenu).length > 0 && (
+          <>
+            <div className="nav-section-title">Управління</div>
+            {filterByRole(adminMenu).map((item) => (
+              <div
+                key={item.id}
+                className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (window.innerWidth <= 768) setIsOpen(false);
+                }}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-label">{item.label}</span>
+              </div>
+            ))}
+          </>
+        )}
       </nav>
+      
       <div className="sidebar-footer">
         <div className="user-profile">
           <div className="user-avatar">{user?.username?.substring(0, 2).toUpperCase() || '??'}</div>

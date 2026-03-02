@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import './VirtualDesk.css';
 import API_URL from '../api';
 
@@ -15,6 +15,7 @@ const dishList = [
 
 const StudentTest = () => {
     const { hash } = useParams();
+    const navigate = useNavigate();
     const [testData, setTestData] = useState(null);
     const [items, setItems] = useState([]);
     const [selectedDish, setSelectedDish] = useState(dishList[0]);
@@ -24,9 +25,9 @@ const StudentTest = () => {
     // Registration State
     const [isRegistered, setIsRegistered] = useState(false);
     const [studentInfo, setStudentInfo] = useState({
-        firstName: '',
         lastName: '',
-        city: ''
+        city: '',
+        position: ''
     });
 
     const [timeLeft, setTimeLeft] = useState(null);
@@ -37,14 +38,21 @@ const StudentTest = () => {
             try {
                 const response = await axios.get(`${API_URL}/tests/${hash}`);
                 setTestData(response.data);
+                if (response.data.city) {
+                    setStudentInfo(prev => ({ ...prev, city: response.data.city }));
+                }
             } catch (error) {
                 console.error('Error fetching test:', error);
+                if (error.response?.status === 410) {
+                    navigate('/inactive');
+                }
             } finally {
                 setLoading(false);
             }
         };
         fetchTest();
     }, [hash]);
+
 
     // Timer logic
     useEffect(() => {
@@ -76,7 +84,7 @@ const StudentTest = () => {
 
     const handleRegister = (e) => {
         e.preventDefault();
-        if (studentInfo.firstName && studentInfo.lastName && studentInfo.city) {
+        if (studentInfo.firstName && studentInfo.lastName && studentInfo.position) {
             setIsRegistered(true);
         } else {
             alert('Будь ласка, заповніть усі поля');
@@ -115,6 +123,7 @@ const StudentTest = () => {
             studentName: studentInfo.firstName,
             studentLastName: studentInfo.lastName,
             studentCity: studentInfo.city,
+            studentPosition: studentInfo.position,
         };
 
         try {
@@ -172,9 +181,28 @@ const StudentTest = () => {
                             <label>Місто</label>
                             <input
                                 type="text"
-                                value={studentInfo.city}
-                                onChange={(e) => setStudentInfo({ ...studentInfo, city: e.target.value })}
-                                placeholder="Введіть місто"
+                                value={studentInfo.city || '—'}
+                                disabled
+                                style={{
+                                    width: '100%',
+                                    padding: '12px 15px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #333',
+                                    background: '#1a1a1a',
+                                    color: '#fff',
+                                    fontSize: '1rem',
+                                    opacity: 0.7,
+                                    cursor: 'not-allowed'
+                                }}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Посада</label>
+                            <input
+                                type="text"
+                                value={studentInfo.position}
+                                onChange={(e) => setStudentInfo({ ...studentInfo, position: e.target.value })}
+                                placeholder="Введіть посаду"
                                 required
                             />
                         </div>
@@ -192,7 +220,7 @@ const StudentTest = () => {
             <header className="desk-header">
                 <div className="header-info">
                     <h1>🍽️ {testData.templateId.name}</h1>
-                    <p>{studentInfo.firstName} {studentInfo.lastName} · {studentInfo.city}</p>
+                    <p>{studentInfo.firstName} {studentInfo.lastName} · {studentInfo.city} ({studentInfo.position})</p>
                 </div>
                 <div className="header-actions">
                     {timeLeft !== null && !testResult && (
@@ -278,9 +306,6 @@ const StudentTest = () => {
                                 {testResult.passed ? '✅ Тест пройдено!' : '❌ Спробуйте ще раз'}
                             </p>
                             <p className="result-hint">Адміністратор отримав ваші результати</p>
-                            <button className="btn-save-template" onClick={() => window.location.reload()}>
-                                Повторити
-                            </button>
                         </div>
                     </aside>
                 )}

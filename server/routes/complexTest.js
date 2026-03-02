@@ -7,12 +7,23 @@ const GameScenario = require('../models/GameScenario');
 const Quiz = require('../models/Quiz');
 const { auth } = require('../middleware/authMiddleware');
 
+const crypto = require('crypto');
+const ComplexTestLink = require('../models/ComplexTestLink');
+
 // ── Admin: CRUD ──────────────────────────────────────────────────────────────
 
 // Get all complex tests
 router.get('/', auth, async (req, res) => {
     try {
-        const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+        let query = {};
+        if (req.user.role !== 'superadmin') {
+            query = {
+                $or: [
+                    { ownerId: req.user._id },
+                    { targetCity: req.user.city, targetCity: { $ne: '' } }
+                ]
+            };
+        }
         const tests = await ComplexTest.find(query).sort({ createdAt: -1 });
         res.json(tests);
     } catch (err) {
@@ -38,6 +49,24 @@ router.post('/', auth, async (req, res) => {
         res.status(201).json(test);
     } catch (err) {
         res.status(400).json({ error: err.message });
+    }
+});
+
+// Admin: Create complex test link
+router.post('/links', auth, async (req, res) => {
+    const { complexTestId } = req.body;
+    if (!complexTestId) return res.status(400).json({ error: 'complexTestId is required' });
+    try {
+        const hash = crypto.randomBytes(16).toString('hex');
+        const link = new ComplexTestLink({
+            complexTestId,
+            hash,
+            ownerId: req.user._id
+        });
+        await link.save();
+        res.status(201).json(link);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -90,9 +119,13 @@ router.get('/available-items', auth, async (req, res) => {
 // Get complex test by hash
 router.get('/hash/:hash', async (req, res) => {
     try {
-        const test = await ComplexTest.findOne({ hash: req.params.hash });
-        if (!test) return res.status(404).json({ error: 'Тест не знайдено' });
+        const link = await ComplexTestLink.findOne({ hash: req.params.hash })
+            .populate('complexTestId')
+            .populate('ownerId', 'city');
+        if (!link) return res.status(404).json({ error: 'Тест не знайдено' });
+        if (link.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
 
+        const test = link.complexTestId;
         // Populate step refs based on type
         const populatedSteps = await Promise.all(test.steps.map(async (step) => {
             const stepObj = step.toObject ? step.toObject() : { ...step };
@@ -114,8 +147,9 @@ router.get('/hash/:hash', async (req, res) => {
             _id: test._id,
             title: test.title,
             description: test.description,
-            hash: test.hash,
-            steps: populatedSteps
+            hash: link.hash,
+            steps: populatedSteps,
+            city: test.targetCity || (link.ownerId ? link.ownerId.city : '')
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -124,7 +158,7 @@ router.get('/hash/:hash', async (req, res) => {
 
 // Submit complex test result
 router.post('/hash/:hash/submit', async (req, res) => {
-    const { studentName, studentLastName, studentCity, steps } = req.body;
+    const { studentName, studentLastName, studentCity, studentPosition, steps } = req.body;
     if (!studentName || !studentLastName || !studentCity) {
         return res.status(400).json({ error: 'Дані студента є обов\'язковими' });
     }
@@ -132,8 +166,15 @@ router.post('/hash/:hash/submit', async (req, res) => {
         return res.status(400).json({ error: 'Результати кроків є обов\'язковими' });
     }
     try {
-        const test = await ComplexTest.findOne({ hash: req.params.hash });
-        if (!test) return res.status(404).json({ error: 'Тест не знайдено' });
+        const link = await ComplexTestLink.findOne({ hash: req.params.hash });
+        if (!link) return res.status(404).json({ error: 'Тест не знайдено' });
+        if (link.isUsed) return res.status(410).json({ error: 'Цей тест вже пройдено' });
+
+        link.isUsed = true;
+        await link.save();
+
+        const testId = link.complexTestId;
+        const test = await ComplexTest.findById(testId);
 
         const overallPassed = steps.every(s => s.passed);
 
@@ -143,6 +184,7 @@ router.post('/hash/:hash/submit', async (req, res) => {
             studentName: String(studentName).trim(),
             studentLastName: String(studentLastName).trim(),
             studentCity: String(studentCity).trim(),
+            studentPosition: String(studentPosition || '').trim(),
             steps,
             overallPassed
         });

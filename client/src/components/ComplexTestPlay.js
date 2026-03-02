@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import './VirtualDesk.css';
 import './ComplexTestPlay.css';
 import API_URL from '../api';
@@ -14,13 +14,36 @@ const dishList = [
     { id: 'coffee', name: 'Кава', icon: '☕' },
 ];
 
+const VideoPlayer = ({ url }) => {
+    if (!url) return null;
+    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/);
+    if (ytMatch && ytMatch[1]) {
+        const videoId = ytMatch[1].split('&')[0];
+        return (
+            <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${videoId}`}
+                title="YouTube video player" frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+        );
+    }
+    const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
+    if (vimeoMatch && vimeoMatch[1]) {
+        return (
+            <iframe src={`https://player.vimeo.com/video/${vimeoMatch[1]}`} width="100%" height="100%"
+                frameBorder="0" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen></iframe>
+        );
+    }
+    const videoSrc = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}${url}`;
+    return <video controls style={{ width: '100%', height: '100%' }}><source src={videoSrc} /></video>;
+};
+
 const ComplexTestPlay = () => {
     const { hash } = useParams();
+    const navigate = useNavigate();
     const [testData, setTestData] = useState(null);
     const [loading, setLoading] = useState(true);
 
     const [isRegistered, setIsRegistered] = useState(false);
-    const [studentInfo, setStudentInfo] = useState({ firstName: '', lastName: '', city: '' });
+    const [studentInfo, setStudentInfo] = useState({ firstName: '', lastName: '', city: '', position: '' });
 
     const [currentStep, setCurrentStep] = useState(0);
     const [stepResults, setStepResults] = useState([]);
@@ -48,14 +71,21 @@ const ComplexTestPlay = () => {
             try {
                 const res = await axios.get(`${API_URL}/complex-tests/hash/${hash}`);
                 setTestData(res.data);
+                if (res.data.city) {
+                    setStudentInfo(prev => ({ ...prev, city: res.data.city }));
+                }
             } catch (err) {
                 console.error(err);
+                if (err.response?.status === 410) {
+                    navigate('/inactive');
+                }
             } finally {
                 setLoading(false);
             }
         };
         fetchTest();
     }, [hash]);
+
 
     const steps = testData?.steps || [];
     const step = steps[currentStep];
@@ -99,7 +129,7 @@ const ComplexTestPlay = () => {
 
     const handleRegister = (e) => {
         e.preventDefault();
-        if (studentInfo.firstName && studentInfo.lastName && studentInfo.city) {
+        if (studentInfo.firstName && studentInfo.lastName && studentInfo.position) {
             setIsRegistered(true);
         } else {
             alert('Будь ласка, заповніть усі поля');
@@ -173,13 +203,23 @@ const ComplexTestPlay = () => {
         const refData = step?.refData;
         if (!refData) return;
         let score = 0;
-        refData.questions.forEach((q, idx) => {
-            if (quizAnswers[idx] === q.correctIndex) score++;
+        const detailedAnswers = refData.questions.map((q, idx) => {
+            const isCorrect = quizAnswers[idx] === q.correctIndex;
+            if (isCorrect) score++;
+            return {
+                questionText: q.text,
+                givenAnswer: q.options[quizAnswers[idx]] || '—',
+                correctAnswer: q.options[q.correctIndex],
+                explanation: q.explanation,
+                image: q.image,
+                video: q.video,
+                isCorrect
+            };
         });
         const total = refData.questions.length;
         const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
         const passed = percentage >= (refData.passingScore || 80);
-        setQuizResult({ score, total, percentage, passed });
+        setQuizResult({ score, total, percentage, passed, answers: detailedAnswers });
         setQuizDone(true);
     };
 
@@ -217,6 +257,7 @@ const ComplexTestPlay = () => {
                     studentName: studentInfo.firstName,
                     studentLastName: studentInfo.lastName,
                     studentCity: studentInfo.city,
+                    studentPosition: studentInfo.position,
                     steps: newResults
                 });
             } catch (e) { console.error('Submit error:', e); }
@@ -250,9 +291,28 @@ const ComplexTestPlay = () => {
                         </div>
                         <div className="form-group">
                             <label>Місто</label>
-                            <input type="text" value={studentInfo.city}
-                                onChange={e => setStudentInfo({ ...studentInfo, city: e.target.value })}
-                                placeholder="Введіть місто" required />
+                            <input
+                                type="text"
+                                value={studentInfo.city || '—'}
+                                disabled
+                                style={{
+                                    width: '100%',
+                                    padding: '12px 15px',
+                                    borderRadius: '8px',
+                                    border: '1px solid #333',
+                                    background: '#1a1a1a',
+                                    color: '#fff',
+                                    fontSize: '1rem',
+                                    opacity: 0.7,
+                                    cursor: 'not-allowed'
+                                }}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Посада</label>
+                            <input type="text" value={studentInfo.position}
+                                onChange={e => setStudentInfo({ ...studentInfo, position: e.target.value })}
+                                placeholder="Введіть посаду" required />
                         </div>
                         <button type="submit" className="btn-save-template" style={{ width: '100%', marginTop: '1rem' }}>
                             Почати тест
@@ -297,9 +357,6 @@ const ComplexTestPlay = () => {
                             {allPassed ? '✅ Всі кроки пройдено!' : '❌ Деякі кроки не пройдено'}
                         </p>
                     </div>
-                    <button className="btn-save-template" onClick={() => window.location.reload()} style={{ width: '100%' }}>
-                        Повторити
-                    </button>
                 </div>
             </div>
         );
@@ -330,7 +387,7 @@ const ComplexTestPlay = () => {
 
             <div className="complex-step-header">
                 <h2>{step?.type === 'desk' ? '🖥️' : step?.type === 'game' ? '🎮' : '📝'} {step?.title}</h2>
-                <p>{studentInfo.firstName} {studentInfo.lastName} · Крок {currentStep + 1} з {steps.length}</p>
+                <p>{studentInfo.firstName} {studentInfo.lastName} · {studentInfo.city} ({studentInfo.position}) · Крок {currentStep + 1} з {steps.length}</p>
             </div>
 
             <div className="complex-step-content">
@@ -479,7 +536,19 @@ const ComplexTestPlay = () => {
                                         </div>
                                         <div className="quiz-q-text">{step.refData.questions[currentQuestion].text}</div>
                                         {step.refData.questions[currentQuestion].image && (
-                                            <img className="quiz-q-image" src={step.refData.questions[currentQuestion].image} alt="question" />
+                                            <div className="q-media-container" style={{ marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                                <img
+                                                    className="quiz-q-image"
+                                                    src={step.refData.questions[currentQuestion].image.startsWith('http') ? step.refData.questions[currentQuestion].image : `${API_URL.replace('/api', '')}${step.refData.questions[currentQuestion].image}`}
+                                                    alt="question"
+                                                    style={{ width: '100%', display: 'block' }}
+                                                />
+                                            </div>
+                                        )}
+                                        {step.refData.questions[currentQuestion].video && (
+                                            <div className="q-media-container" style={{ marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', aspectRatio: '16/9' }}>
+                                                <VideoPlayer url={step.refData.questions[currentQuestion].video} />
+                                            </div>
                                         )}
                                         <div className="quiz-options">
                                             {step.refData.questions[currentQuestion].options.map((opt, oi) => (

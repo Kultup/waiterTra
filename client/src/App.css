@@ -13,6 +13,29 @@
   box-sizing: border-box;
 }
 
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--primary-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-blue);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) var(--primary-bg);
+}
+
 body {
   margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -32,7 +55,7 @@ body {
   margin-left: 260px;
   padding: 2.5rem;
   background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.05), transparent);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .content-header {

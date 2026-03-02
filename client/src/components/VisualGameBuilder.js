@@ -25,12 +25,27 @@ const VisualGameBuilder = () => {
     const [linkingFrom, setLinkingFrom] = useState(null); // { nodeId, choiceId }
     const [activeTab, setActiveTab] = useState('canvas'); // 'canvas' | 'characters'
     const [charForm, setCharForm] = useState(null);
+    const [user, setUser] = useState(null);
+    const [cities, setCities] = useState([]);
+    const [filterCity, setFilterCity] = useState('');
 
     const canvasRef = useRef(null);
 
     useEffect(() => {
+        fetchUser();
         fetchScenarios();
+        fetchCities();
     }, []);
+
+    const fetchUser = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUser(res.data);
+        } catch (e) { console.error(e); }
+    };
 
     const fetchScenarios = async () => {
         try {
@@ -42,6 +57,13 @@ const VisualGameBuilder = () => {
         } catch (err) {
             console.error('fetchScenarios:', err);
         }
+    };
+
+    const fetchCities = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/cities`);
+            setCities(res.data);
+        } catch (err) { console.error(err); }
     };
 
     const handleCopyLink = async (id) => {
@@ -65,6 +87,7 @@ const VisualGameBuilder = () => {
             _id: null,
             title: 'Новий сценарій',
             description: '',
+            targetCity: '',
             startNodeId: startId,
             characters: [],
             nodes: [
@@ -139,9 +162,9 @@ const VisualGameBuilder = () => {
                         text: c.text,
                         nextNodeId: c.nextNodeId || null,
                         isWin: c.isWin,
-                        result: c.result
                     }))
-                }))
+                })),
+                targetCity: user?.role === 'superadmin' ? editing.targetCity : undefined
             };
             if (editing._id) {
                 await axios.put(`${API_URL}/game-scenarios/${editing._id}`, payload, config);
@@ -384,18 +407,42 @@ const VisualGameBuilder = () => {
     };
 
     if (!editing) {
+        const filteredScenarios = scenarios.filter(s =>
+            !filterCity || s.targetCity === filterCity
+        );
+
         return (
             <div className="game-builder-container">
-                <div className="content-header">
+                <div className="content-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
                     <h2>🗺️ Візуальний конструктор</h2>
-                    <button className="btn-add" onClick={openNew}>+ Створити гру</button>
+                    <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {user?.role === 'superadmin' && (
+                            <div className="city-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                                <span style={{ fontSize: '0.8rem', color: '#aaa' }}>📍 Фільтр міста:</span>
+                                <select
+                                    value={filterCity}
+                                    onChange={e => setFilterCity(e.target.value)}
+                                    style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', cursor: 'pointer', fontSize: '0.9rem' }}
+                                >
+                                    <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                    {cities.map(c => (
+                                        <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        <button className="btn-add" onClick={openNew}>+ Створити гру</button>
+                    </div>
                 </div>
                 <div className="scenarios-grid">
-                    {scenarios.map(s => (
+                    {filteredScenarios.map(s => (
                         <div key={s._id} className="scenario-card">
-                            <div className="scenario-card-header">
-                                <h3>{s.title}</h3>
-                                {copyStatus === s._id && <span className="copy-confirm">✓ Скопійовано</span>}
+                            <div className="scenario-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {s.title}
+                                    {s.targetCity && <span className="city-badge">📍 {s.targetCity}</span>}
+                                </h3>
+                                {copyStatus === s._id && <span className="copy-confirm">✓</span>}
                             </div>
                             <p>{s.description}</p>
                             <div className="scenario-card-footer">
@@ -431,6 +478,22 @@ const VisualGameBuilder = () => {
                         value={editing.title}
                         onChange={e => setEditing({ ...editing, title: e.target.value })}
                     />
+                    {user?.role === 'superadmin' && (
+                        <div className="vb-city-field" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#888', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>📍 Місто:</span>
+                            <select
+                                className="vb-input"
+                                style={{ width: '150px', background: 'transparent', border: '1px solid #333', height: '32px', color: '#fff' }}
+                                value={editing.targetCity || ''}
+                                onChange={e => setEditing({ ...editing, targetCity: e.target.value })}
+                            >
+                                <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                {cities.map(c => (
+                                    <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     <div className="vb-tabs" style={{ display: 'flex', gap: '10px' }}>
                         <button
                             className={`vb-tab-btn ${activeTab === 'canvas' ? 'active' : ''}`}

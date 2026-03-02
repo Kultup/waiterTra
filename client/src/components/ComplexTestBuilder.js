@@ -10,16 +10,39 @@ const ComplexTestBuilder = () => {
     const [description, setDescription] = useState('');
     const [steps, setSteps] = useState([]);
     const [editingId, setEditingId] = useState(null);
+    const [targetCity, setTargetCity] = useState('');
+    const [cities, setCities] = useState([]);
+    const [filterCity, setFilterCity] = useState('');
 
     // Available items
     const [available, setAvailable] = useState({ templates: [], scenarios: [], quizzes: [] });
     const [savedTests, setSavedTests] = useState([]);
     const [copyStatus, setCopyStatus] = useState(null);
+    const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        fetchUser();
         fetchData();
+        fetchCities();
     }, []);
+
+    const fetchUser = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUser(res.data);
+        } catch (e) { console.error(e); }
+    };
+
+    const fetchCities = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/cities`);
+            setCities(res.data);
+        } catch (err) { console.error(err); }
+    };
 
     const fetchData = async () => {
         try {
@@ -67,7 +90,12 @@ const ComplexTestBuilder = () => {
         try {
             const token = localStorage.getItem('token');
             const config = { headers: { Authorization: `Bearer ${token}` } };
-            const payload = { title: title.trim(), description: description.trim(), steps };
+            const payload = {
+                title: title.trim(),
+                description: description.trim(),
+                steps,
+                targetCity: user?.role === 'superadmin' ? targetCity : undefined
+            };
 
             if (editingId) {
                 await axios.put(`${API_URL}/complex-tests/${editingId}`, payload, config);
@@ -78,6 +106,7 @@ const ComplexTestBuilder = () => {
             setTitle('');
             setDescription('');
             setSteps([]);
+            setTargetCity('');
             setEditingId(null);
             fetchData();
         } catch (e) {
@@ -91,6 +120,7 @@ const ComplexTestBuilder = () => {
         setTitle(test.title);
         setDescription(test.description || '');
         setSteps(test.steps || []);
+        setTargetCity(test.targetCity || '');
     };
 
     const handleDelete = async (id) => {
@@ -101,7 +131,7 @@ const ComplexTestBuilder = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (editingId === id) {
-                setEditingId(null); setTitle(''); setDescription(''); setSteps([]);
+                setEditingId(null); setTitle(''); setDescription(''); setSteps([]); setTargetCity('');
             }
             fetchData();
         } catch (e) {
@@ -109,13 +139,20 @@ const ComplexTestBuilder = () => {
         }
     };
 
-    const handleCopyLink = async (hash) => {
-        const url = `${window.location.origin}/complex/${hash}`;
+    const handleCopyLink = async (complexTestId) => {
         try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/complex-tests/links`, { complexTestId }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const url = `${window.location.origin}/complex/${res.data.hash}`;
             await navigator.clipboard.writeText(url);
-            setCopyStatus(hash);
+            setCopyStatus(complexTestId);
             setTimeout(() => setCopyStatus(null), 3000);
-        } catch (e) { alert('Помилка копіювання'); }
+        } catch (e) {
+            console.error('handleCopyLink error:', e);
+            alert('Помилка копіювання');
+        }
     };
 
     const cancelEdit = () => {
@@ -123,6 +160,7 @@ const ComplexTestBuilder = () => {
         setTitle('');
         setDescription('');
         setSteps([]);
+        setTargetCity('');
     };
 
     if (loading) return <div className="placeholder-view">Завантаження...</div>;
@@ -159,6 +197,22 @@ const ComplexTestBuilder = () => {
                             placeholder="Короткий опис тесту..." rows={2} />
                     </div>
 
+                    {user?.role === 'superadmin' && (
+                        <div className="builder-field">
+                            <label>📍 Призначити місту (залиште порожнім для всіх)</label>
+                            <select
+                                value={targetCity}
+                                onChange={e => setTargetCity(e.target.value)}
+                                style={{ background: 'transparent', border: '1px solid #444', height: '32px', color: '#fff', padding: '0 10px', borderRadius: '4px', width: '200px' }}
+                            >
+                                <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                {cities.map(c => (
+                                    <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="steps-label">Кроки тесту ({steps.length})</div>
                     {steps.length === 0 ? (
                         <div className="empty-steps">
@@ -191,24 +245,49 @@ const ComplexTestBuilder = () => {
                     {/* Saved tests */}
                     {savedTests.length > 0 && (
                         <div className="saved-tests">
-                            <div className="steps-label">Збережені тести ({savedTests.length})</div>
-                            {savedTests.map(test => (
-                                <div key={test._id} className="saved-test-card">
-                                    <div className="saved-test-info">
-                                        <div className="test-title">🧩 {test.title}</div>
-                                        <div className="test-meta">{test.steps?.length || 0} кроків</div>
+                            <div className="steps-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                                <span>Збережені тести ({savedTests.length})</span>
+                                {user?.role === 'superadmin' && (
+                                    <div className="city-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', fontWeight: 'normal' }}>
+                                        <span style={{ fontSize: '0.7rem', color: '#aaa', whiteSpace: 'nowrap' }}>📍 Місто:</span>
+                                        <select
+                                            value={filterCity}
+                                            onChange={e => setFilterCity(e.target.value)}
+                                            style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', cursor: 'pointer', fontSize: '0.8rem' }}
+                                        >
+                                            <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                            {cities.map(c => (
+                                                <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                            ))}
+                                        </select>
                                     </div>
-                                    <div className="saved-test-actions">
-                                        {copyStatus === test.hash ? (
-                                            <span className="saved-copied">✓</span>
-                                        ) : (
-                                            <button onClick={() => handleCopyLink(test.hash)} title="Скопіювати посилання">📋</button>
-                                        )}
-                                        <button onClick={() => handleEdit(test)} title="Редагувати">✏️</button>
-                                        <button className="btn-delete" onClick={() => handleDelete(test._id)} title="Видалити">×</button>
+                                )}
+                            </div>
+                            {(() => {
+                                const filteredTests = savedTests.filter(t => !filterCity || t.targetCity === filterCity);
+                                if (filteredTests.length === 0) return <div className="qb-empty" style={{ padding: '1rem', textAlign: 'center', color: '#888' }}>Немає знайдених тестів</div>;
+
+                                return filteredTests.map(test => (
+                                    <div key={test._id} className="saved-test-card">
+                                        <div className="saved-test-info">
+                                            <div className="test-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <span>🧩 {test.title}</span>
+                                                {test.targetCity && <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 'normal', whiteSpace: 'nowrap' }}>📍 {test.targetCity}</span>}
+                                            </div>
+                                            <div className="test-meta">{test.steps?.length || 0} кроків</div>
+                                        </div>
+                                        <div className="saved-test-actions">
+                                            {copyStatus === test._id ? (
+                                                <span className="saved-copied">✓</span>
+                                            ) : (
+                                                <button onClick={() => handleCopyLink(test._id)} title="Скопіювати посилання">📋</button>
+                                            )}
+                                            <button onClick={() => handleEdit(test)} title="Редагувати">✏️</button>
+                                            <button className="btn-delete" onClick={() => handleDelete(test._id)} title="Видалити">×</button>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ));
+                            })()}
                         </div>
                     )}
                 </div>

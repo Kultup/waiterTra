@@ -6,7 +6,15 @@ const router = express.Router();
 // Get all templates
 router.get('/', auth, async (req, res) => {
   try {
-    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+    let query = {};
+    if (req.user.role !== 'superadmin') {
+      query = {
+        $or: [
+          { ownerId: req.user._id },
+          { targetCity: req.user.city, targetCity: { $ne: '' } }
+        ]
+      };
+    }
     const templates = await DeskTemplate.find(query).sort({ createdAt: -1 });
     res.json(templates);
   } catch (err) {

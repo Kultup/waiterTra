@@ -1,15 +1,61 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import API_URL from '../api';
 import './QuizBuilder.css'; // Reusing some base styles
 
+const VideoPlayer = ({ url }) => {
+    if (!url) return null;
+
+    // Detect YouTube
+    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/);
+    if (ytMatch && ytMatch[1]) {
+        const videoId = ytMatch[1].split('&')[0];
+        return (
+            <iframe
+                width="100%"
+                height="100%"
+                src={`https://www.youtube.com/embed/${videoId}`}
+                title="YouTube video player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+            ></iframe>
+        );
+    }
+
+    // Detect Vimeo
+    const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
+    if (vimeoMatch && vimeoMatch[1]) {
+        return (
+            <iframe
+                src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
+                width="100%"
+                height="100%"
+                frameBorder="0"
+                allow="autoplay; fullscreen; picture-in-picture"
+                allowFullScreen
+            ></iframe>
+        );
+    }
+
+    // Generic HTML5 Video
+    const videoSrc = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}${url}`;
+    return (
+        <video controls style={{ width: '100%', height: '100%' }}>
+            <source src={videoSrc} />
+            Your browser does not support the video tag.
+        </video>
+    );
+};
+
 const QuizPlay = () => {
     const { hash } = useParams();
+    const navigate = useNavigate();
     const [quiz, setQuiz] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isRegistered, setIsRegistered] = useState(false);
-    const [studentInfo, setStudentInfo] = useState({ firstName: '', lastName: '', city: '' });
+    const [studentInfo, setStudentInfo] = useState({ firstName: '', lastName: '', city: '', position: '' });
     const [answers, setAnswers] = useState({});
     const [result, setResult] = useState(null);
     const [submitting, setSubmitting] = useState(false);
@@ -29,12 +75,19 @@ const QuizPlay = () => {
         try {
             const res = await axios.get(`${API_URL}/quiz/hash/${hash}`);
             setQuiz(res.data);
+            if (res.data.city) {
+                setStudentInfo(prev => ({ ...prev, city: res.data.city }));
+            }
         } catch (err) {
             console.error('fetchQuiz:', err);
+            if (err.response?.status === 410) {
+                navigate('/inactive');
+            }
         } finally {
             setLoading(false);
         }
     };
+
 
     const startTimer = (mins) => {
         if (!mins || mins <= 0) return;
@@ -53,7 +106,8 @@ const QuizPlay = () => {
 
     const handleRegister = (e) => {
         e.preventDefault();
-        if (studentInfo.firstName && studentInfo.lastName && studentInfo.city) {
+        // Validation now exclude explicit city selection, but check if we have it from info
+        if (studentInfo.firstName && studentInfo.lastName && studentInfo.position) {
             setIsRegistered(true);
             if (quiz && quiz.timeLimit > 0) {
                 startTimer(quiz.timeLimit);
@@ -75,6 +129,7 @@ const QuizPlay = () => {
                 studentName: studentInfo.firstName,
                 studentLastName: studentInfo.lastName,
                 studentCity: studentInfo.city,
+                studentPosition: studentInfo.position,
                 answers
             });
             setResult(res.data);
@@ -121,12 +176,21 @@ const QuizPlay = () => {
                                 required
                             />
                         </div>
-                        <div className="form-group" style={{ marginBottom: '2rem' }}>
+                        <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                             <label className="qb-label">Місто</label>
                             <input
                                 className="qb-input"
-                                value={studentInfo.city}
-                                onChange={e => setStudentInfo({ ...studentInfo, city: e.target.value })}
+                                value={studentInfo.city || '—'}
+                                disabled
+                                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                            />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: '2rem' }}>
+                            <label className="qb-label">Посада</label>
+                            <input
+                                className="qb-input"
+                                value={studentInfo.position}
+                                onChange={e => setStudentInfo({ ...studentInfo, position: e.target.value })}
                                 required
                             />
                         </div>
@@ -148,7 +212,6 @@ const QuizPlay = () => {
                         {isPassed ? 'ТЕСТ ПРОЙДЕНО' : 'ТЕСТ НЕ ЗДАНО'}
                     </p>
                     <p style={{ color: '#888', marginBottom: '2rem' }}>Ви відповіли правильно на {result.score} з {result.total} питань.</p>
-                    <button className="qb-btn qb-btn-secondary" onClick={() => window.location.reload()}>Повторити</button>
                 </div>
             </div>
         );
@@ -177,6 +240,15 @@ const QuizPlay = () => {
                 <header style={{ marginBottom: '3rem', borderBottom: '1px solid #333', paddingBottom: '2rem' }}>
                     <h1>{quiz.title}</h1>
                     <p style={{ color: '#888' }}>{quiz.description}</p>
+                    <div className="quiz-progress-bar" style={{ height: '4px', background: '#333', borderRadius: '2px', marginTop: '1rem' }}>
+                        <div className="quiz-progress-fill" style={{
+                            height: '100%',
+                            background: '#38bdf8',
+                            borderRadius: '2px',
+                            width: `${(Object.keys(answers).length / quiz.questions.length) * 100}%`,
+                            transition: 'width 0.3s ease'
+                        }} />
+                    </div>
                 </header>
 
                 <main>
@@ -186,7 +258,13 @@ const QuizPlay = () => {
 
                             {q.image && (
                                 <div className="q-image-container" style={{ marginBottom: '1.5rem', borderRadius: '1rem', overflow: 'hidden', border: '1px solid #333' }}>
-                                    <img src={q.image} alt="Question" style={{ width: '100%', display: 'block' }} />
+                                    <img src={q.image.startsWith('http') ? q.image : `${API_URL.replace('/api', '')}${q.image}`} alt="Question" style={{ width: '100%', display: 'block' }} />
+                                </div>
+                            )}
+
+                            {q.video && (
+                                <div className="q-video-container" style={{ marginBottom: '1.5rem', borderRadius: '1rem', overflow: 'hidden', border: '1px solid #333', aspectRatio: '16/9' }}>
+                                    <VideoPlayer url={q.video} />
                                 </div>
                             )}
 
