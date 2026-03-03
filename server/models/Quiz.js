@@ -17,7 +17,6 @@ const quizSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-quizSchema.index({ hash: 1 });
 quizSchema.index({ city: 1, isActive: 1 });
 
 module.exports = mongoose.model('Quiz', quizSchema);
