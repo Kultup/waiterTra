@@ -1,8 +1,27 @@
-// Mock GameScenario model for tests
-module.exports = {
-    find: jest.fn(),
-    findById: jest.fn(),
-    create: jest.fn(),
-    findByIdAndUpdate: jest.fn(),
-    findByIdAndDelete: jest.fn(),
-};
+const mongoose = require('mongoose');
+
+const choiceSchema = new mongoose.Schema({
+    text: { type: String, required: true },
+    nextNodeId: { type: String },
+    isWin: { type: Boolean },
+    result: { type: String }
+});
+
+const nodeSchema = new mongoose.Schema({
+    nodeId: { type: String, required: true },
+    text: { type: String, required: true },
+    choices: [choiceSchema]
+});
+
+const gameScenarioSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    description: { type: String },
+    targetCity: { type: String, default: '' },
+    startNodeId: { type: String, required: true },
+    nodes: [nodeSchema],
+    createdAt: { type: Date, default: Date.now }
+});
+
+gameScenarioSchema.index({ targetCity: 1 });
+
+module.exports = mongoose.model('GameScenario', gameScenarioSchema);
