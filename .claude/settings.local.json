@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(cd \"C:\\\\Users\\\\QwertY\\\\Desktop\\\\aaaaaqqq\\\\server\" && npm install jsonwebtoken 2>&1)"
-    ]
-  }
-}
