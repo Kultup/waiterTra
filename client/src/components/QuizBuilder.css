@@ -364,6 +364,13 @@
     border-color: #38bdf8;
 }
 
+/* Override for select elements with qb-input class */
+select.qb-input {
+    width: auto;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+}
+
 .qb-opt-remove {
     background: transparent;
     border: none;
@@ -387,4 +394,28 @@
     font-size: 4rem;
     margin-bottom: 2rem;
     display: block;
+}
+
+/* Select styles */
+.qb-main select,
+.quiz-header select {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #fff;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    outline: none;
+}
+
+.qb-main select:focus,
+.quiz-header select:focus {
+    border-color: #38bdf8;
+}
+
+.qb-main select option,
+.quiz-header select option {
+    background: #1a1a1a;
+    color: #fff;
 }

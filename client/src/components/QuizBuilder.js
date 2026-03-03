@@ -212,13 +212,12 @@ const QuizBuilder = () => {
                                 <span style={{ color: '#888', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>📍 Місто:</span>
                                 <select
                                     className="qb-input"
-                                    style={{ width: '200px', background: 'transparent', border: '1px solid #444', height: '32px', color: '#fff' }}
                                     value={editing.targetCity || ''}
                                     onChange={e => setEditing({ ...editing, targetCity: e.target.value })}
                                 >
-                                    <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                    <option value="">Всі міста</option>
                                     {cities.map(c => (
-                                        <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                        <option key={c._id} value={c.name}>{c.name}</option>
                                     ))}
                                 </select>
                             </div>
@@ -392,11 +391,10 @@ const QuizBuilder = () => {
                             <select
                                 value={filterCity}
                                 onChange={e => setFilterCity(e.target.value)}
-                                style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', cursor: 'pointer', fontSize: '0.9rem' }}
                             >
-                                <option value="" style={{ color: '#000' }}>Всі міста</option>
+                                <option value="">Всі міста</option>
                                 {cities.map(c => (
-                                    <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
+                                    <option key={c._id} value={c.name}>{c.name}</option>
                                 ))}
                             </select>
                         </div>
