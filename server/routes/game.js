@@ -91,15 +91,48 @@ const linksRouter = express.Router();
 linksRouter.get('/:hash', async (req, res) => {
   try {
     const link = await GameLink.findOne({ hash: req.params.hash })
-      .populate('scenarioId')
-      .populate('ownerId', 'city');
-    if (!link) return res.status(404).json({ error: 'Посилання не знайдено' });
-    if (link.isUsed) return res.status(410).json({ error: 'Це посилання вже використано' });
+      .populate('scenarioId');
+    
+    console.log('Game link lookup:', { 
+      hash: req.params.hash, 
+      found: !!link, 
+      scenarioId: link?.scenarioId?._id,
+      isUsed: link?.isUsed,
+      isActive: link?.isActive
+    });
+    
+    if (!link) {
+      console.error('Link not found for hash:', req.params.hash);
+      return res.status(404).json({ error: 'Посилання не знайдено' });
+    }
+    
+    if (link.isUsed || !link.isActive) {
+      console.error('Link is used/inactive for hash:', req.params.hash);
+      return res.status(410).json({ 
+        error: 'Це посилання вже використано',
+        isUsed: true
+      });
+    }
+    
+    if (!link.scenarioId) {
+      console.error('Scenario not found for link hash:', req.params.hash);
+      return res.status(404).json({ error: 'Сценарій не знайдено' });
+    }
 
-    const response = link.toObject();
-    response.city = link.scenarioId.targetCity || (link.ownerId ? link.ownerId.city : '');
+    const response = {
+      scenarioId: link.scenarioId,
+      city: link.scenarioId.targetCity || ''
+    };
+    
+    console.log('Returning game data:', { 
+      scenarioTitle: link.scenarioId.title,
+      hasStartNode: !!link.scenarioId.startNodeId,
+      city: response.city
+    });
+    
     res.json(response);
   } catch (error) {
+    console.error('Error fetching game link:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -126,21 +159,35 @@ const resultsRouter = express.Router();
 
 // Публічний: студент відправляє результат (без авторизації)
 resultsRouter.post('/', async (req, res) => {
+  console.log('=== GAME RESULTS ENDPOINT CALLED ===');
   const { scenarioTitle, playerName, playerLastName, playerCity, playerPosition, isWin, hash } = req.body;
 
+  console.log('Received game result:', { 
+    scenarioTitle, 
+    playerName, 
+    playerLastName, 
+    playerCity, 
+    playerPosition, 
+    isWin, 
+    hash,
+    hasHash: !!hash 
+  });
+
   if (!scenarioTitle || !String(scenarioTitle).trim()) {
+    console.error('Validation failed: scenarioTitle missing');
     return res.status(400).json({ error: 'scenarioTitle є обов\'язковим' });
   }
   if (!playerName || !String(playerName).trim()) {
+    console.error('Validation failed: playerName missing');
     return res.status(400).json({ error: 'playerName є обов\'язковим' });
   }
   if (!playerLastName || !String(playerLastName).trim()) {
+    console.error('Validation failed: playerLastName missing');
     return res.status(400).json({ error: 'playerLastName є обов\'язковим' });
   }
-  if (!playerCity || !String(playerCity).trim()) {
-    return res.status(400).json({ error: 'playerCity є обов\'язковим' });
-  }
+  // playerCity is now optional
   if (typeof isWin !== 'boolean') {
+    console.error('Validation failed: isWin not boolean', { isWin });
     return res.status(400).json({ error: 'isWin повинен бути булевим значенням' });
   }
 
@@ -148,20 +195,39 @@ resultsRouter.post('/', async (req, res) => {
     const scenario = await GameScenario.findOne({ title: scenarioTitle });
     if (!scenario) return res.status(404).json({ error: 'Scenario not found' });
 
+    const endingTitle = req.body.endingTitle || '';
+
     const result = new GameResult({
-      ...req.body,
       scenarioId: scenario._id,
-      ownerId: scenario.ownerId
+      ownerId: scenario.ownerId,
+      scenarioTitle: scenario.title,
+      studentName: playerName || '',
+      studentLastName: playerLastName || '',
+      city: playerCity || '',
+      position: playerPosition || '',
+      endingTitle,
+      isWin,
+      hash,
+      choicePath: req.body.choicePath || []
     });
     await result.save();
 
+    console.log('Result saved successfully, hash:', hash);
+
     // Mark link as used if hash provided
     if (hash) {
-      await GameLink.findOneAndUpdate({ hash }, { isUsed: true });
+      console.log('Attempting to mark link as used...');
+      const updateResult = await GameLink.findOneAndUpdate({ hash }, { isUsed: true });
+      console.log('Link marked as used:', !!updateResult);
+
+      // Verify the update
+      const verifyLink = await GameLink.findOne({ hash });
+      console.log('Verified link isUsed:', verifyLink?.isUsed);
     }
 
     res.status(201).json(result);
   } catch (error) {
+    console.error('Error saving game result:', error);
     res.status(400).json({ error: error.message });
   }
 });

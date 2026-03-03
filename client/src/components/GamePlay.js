@@ -14,8 +14,9 @@ const GamePlay = () => {
     const [choicePath, setChoicePath] = useState([]);
     const [animKey, setAnimKey] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [linkUsed, setLinkUsed] = useState(false);
 
-    // ── Registration ─────────────────────────────────────────────
+    // ── Registration ────────────────────────────────────────────
     const [isRegistered, setIsRegistered] = useState(false);
     const [playerInfo, setPlayerInfo] = useState({
         firstName: '',
@@ -27,16 +28,19 @@ const GamePlay = () => {
         const fetchGame = async () => {
             try {
                 const res = await axios.get(`${API_URL}/game-links/${hash}`);
+                console.log('Game response:', res.data);
                 const sc = res.data.scenarioId;
                 setScenario(sc);
                 setCurrentNodeId(sc.startNodeId);
-                if (res.data.city) {
-                    setPlayerInfo(prev => ({ ...prev, city: res.data.city }));
+                const city = res.data.city || '';
+                console.log('City from server:', city);
+                if (city) {
+                    setPlayerInfo(prev => ({ ...prev, city: city }));
                 }
             } catch (err) {
                 console.error('fetchGame:', err);
                 if (err.response?.status === 410) {
-                    navigate('/inactive');
+                    setLinkUsed(true);
                 }
             } finally {
                 setLoading(false);
@@ -175,6 +179,21 @@ const GamePlay = () => {
         );
     }
 
+    // ── Link used screen ─────────────────────────────────────────
+
+    if (linkUsed) {
+        return (
+            <div className="game-end-screen lose" key="link-used">
+                <div className="end-icon">🔒</div>
+                <h1>Посилання вже використано</h1>
+                <p className="end-info">
+                    ❌ Цей тест вже було пройдено.<br/>
+                    Повторне проходження неможливе.
+                </p>
+            </div>
+        );
+    }
+
     // ── End screen ───────────────────────────────────────────────
 
     if (endResult) {
@@ -188,11 +207,7 @@ const GamePlay = () => {
                 {endResult.result && (
                     <p className="end-result-text">{endResult.result}</p>
                 )}
-                <div className="end-actions">
-                    {history.length > 0 && (
-                        <button className="btn-back" onClick={handleBack}>← Назад</button>
-                    )}
-                </div>
+                <p className="end-info">❌ Тест завершено. Повторне проходження неможливе.</p>
             </div>
         );
     }

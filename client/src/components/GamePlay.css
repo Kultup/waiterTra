@@ -252,6 +252,17 @@
     text-align: left;
 }
 
+.end-info {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    margin-top: 1.5rem;
+    padding: 1rem 1.5rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 12px;
+    text-align: center;
+}
+
 .end-actions {
     display: flex;
     gap: 1rem;

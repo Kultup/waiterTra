@@ -1,6 +1,8 @@
 const express = require('express');
 const DeskTemplate = require('../models/DeskTemplate');
 const { auth } = require('../middleware/authMiddleware');
+const path = require('path');
+const fs = require('fs');
 const router = express.Router();
 
 // Get all templates
@@ -71,6 +73,25 @@ router.delete('/:id', auth, async (req, res) => {
     const template = await DeskTemplate.findOneAndDelete(query);
     if (!template) return res.status(404).json({ error: 'Template not found or unauthorized' });
     res.json({ message: 'Template deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Download scenario Excel template
+router.get('/scenario-template/excel', (req, res) => {
+  try {
+    const templatePath = path.join(__dirname, '..', '..', 'templates', 'scenario_template.xlsx');
+    
+    if (!fs.existsSync(templatePath)) {
+      return res.status(404).json({ error: 'Шаблон не знайдено' });
+    }
+    
+    res.download(templatePath, 'scenario_template.xlsx', (err) => {
+      if (err) {
+        console.error('Error downloading template:', err);
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
