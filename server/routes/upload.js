@@ -2,12 +2,19 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { auth } = require('../middleware/authMiddleware');
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // Configure storage
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+        cb(null, uploadsDir);
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -36,6 +43,7 @@ router.post('/', auth, upload.single('file'), (req, res) => {
         return res.status(400).json({ error: 'No file uploaded' });
     }
     const fileUrl = `/uploads/${req.file.filename}`;
+    console.log('File uploaded:', fileUrl);
     res.json({ url: fileUrl });
 });
 
