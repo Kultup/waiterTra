@@ -9,6 +9,5 @@ const gameLinkSchema = new mongoose.Schema({
     expiresAt: { type: Date }
 });
 
-gameLinkSchema.index({ hash: 1 });
 
 module.exports = mongoose.model('GameLink', gameLinkSchema);

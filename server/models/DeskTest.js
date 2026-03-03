@@ -11,7 +11,6 @@ const deskTestSchema = new mongoose.Schema({
     expiresAt: { type: Date }
 });
 
-deskTestSchema.index({ hash: 1 });
 deskTestSchema.index({ city: 1, isActive: 1 });
 
 module.exports = mongoose.model('DeskTest', deskTestSchema);
