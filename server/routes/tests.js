@@ -208,7 +208,7 @@ router.post('/:hash/submit', async (req, res) => {
 // ── Захищені (адмін) ──────────────────────────────────────────────────────────
 
 router.post('/', auth, async (req, res) => {
-  const { templateId } = req.body;
+  const { templateId, templateName } = req.body;
   if (!templateId) {
     return res.status(400).json({ error: 'templateId є обов\'язковим' });
   }
@@ -216,6 +216,7 @@ router.post('/', auth, async (req, res) => {
     const hash = crypto.randomBytes(16).toString('hex');
     const test = new DeskTest({
       templateId,
+      templateName: templateName || 'Шаблон',
       hash,
       ownerId: req.user._id,
       targetCity: req.body.targetCity || ''
@@ -223,6 +224,7 @@ router.post('/', auth, async (req, res) => {
     await test.save();
     res.status(201).json(test);
   } catch (error) {
+    console.error('Error creating test:', error);
     res.status(400).json({ error: error.message });
   }
 });
