@@ -148,8 +148,18 @@ const VirtualDesk = () => {
             if (type === 'save') {
                 if (!templateName.trim()) { alert('Введіть назву шаблону'); return; }
                 const payload = {
+                    templateName: templateName.trim(),
                     name: templateName.trim(),
-                    items: items.map(({ name, icon, x, y, type }) => ({ name, icon, x, y, type })),
+                    items: items.map(({ name, icon, x, y, type, id, width, height }) => ({ 
+                        id: id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, 
+                        name, 
+                        icon, 
+                        x, 
+                        y, 
+                        type,
+                        width: width || 100,
+                        height: height || 100
+                    })),
                     timeLimit,
                     targetCity: user?.role === 'superadmin' ? targetCity : undefined
                 };
