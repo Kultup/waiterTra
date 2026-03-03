@@ -19,9 +19,11 @@ const gameScenarioSchema = new mongoose.Schema({
     targetCity: { type: String, default: '' },
     startNodeId: { type: String, required: true },
     nodes: [nodeSchema],
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     createdAt: { type: Date, default: Date.now }
 });
 
 gameScenarioSchema.index({ targetCity: 1 });
+gameScenarioSchema.index({ ownerId: 1 });
 
 module.exports = mongoose.model('GameScenario', gameScenarioSchema);
