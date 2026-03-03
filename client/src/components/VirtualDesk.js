@@ -206,6 +206,7 @@ const VirtualDesk = () => {
         const token = localStorage.getItem('token');
         const res = await axios.post(`${API_URL}/tests`, {
             templateId,
+            templateName: template?.name || template?.templateName || 'Шаблон',
             targetCity: template?.targetCity || ''
         }, {
             headers: { Authorization: `Bearer ${token}` }
