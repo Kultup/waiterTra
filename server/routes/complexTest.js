@@ -5,6 +5,7 @@ const ComplexTestResult = require('../models/ComplexTestResult');
 const DeskTemplate = require('../models/DeskTemplate');
 const GameScenario = require('../models/GameScenario');
 const Quiz = require('../models/Quiz');
+const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 
 const crypto = require('crypto');
@@ -143,13 +144,24 @@ router.get('/hash/:hash', async (req, res) => {
             return stepObj;
         }));
 
+        const city = test.targetCity || (link.ownerId ? link.ownerId.city : '');
+
+        // Трекінг відвідування
+        PageView.create({
+            testType: 'complex',
+            hash: req.params.hash,
+            ownerId: link.ownerId,
+            city,
+            ip: req.ip || req.headers['x-forwarded-for'] || ''
+        }).catch(() => {});
+
         res.json({
             _id: test._id,
             title: test.title,
             description: test.description,
             hash: link.hash,
             steps: populatedSteps,
-            city: test.targetCity || (link.ownerId ? link.ownerId.city : '')
+            city
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -198,7 +210,14 @@ router.post('/hash/:hash/submit', async (req, res) => {
 // Admin: Get results
 router.get('/results', auth, async (req, res) => {
     try {
-        const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+        let query = {};
+        if (req.user.role === 'superadmin') {
+            query = {};
+        } else if (req.user.role === 'viewer') {
+            query = req.user.city ? { studentCity: req.user.city } : { _id: null };
+        } else {
+            query = { ownerId: req.user._id };
+        }
         const results = await ComplexTestResult.find(query)
             .populate('complexTestId', 'title')
             .sort({ completedAt: -1 });

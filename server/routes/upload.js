@@ -20,27 +20,48 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+    limits: { fileSize: 500 * 1024 * 1024 }, // 500MB limit
     fileFilter: (req, file, cb) => {
-        const filetypes = /jpeg|jpg|png|gif|mp4|webm|mpeg/;
-        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-        const mimetype = filetypes.test(file.mimetype);
-        if (mimetype && extname) {
-            return cb(null, true);
+        const allowedMimes = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+            'video/mp4', 'video/webm', 'video/mpeg', 'video/quicktime'
+        ];
+        if (allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
         } else {
-            cb(new Error('Only images and videos are allowed!'));
+            cb(new Error('Дозволені тільки зображення та відео!'));
         }
     }
 });
 
 // Upload endpoint
 router.post('/', auth, upload.single('file'), (req, res) => {
+    console.log('Upload request:', {
+        file: req.file ? {
+            filename: req.file.filename,
+            size: req.file.size,
+            mimetype: req.file.mimetype,
+            path: req.file.path
+        } : null,
+        user: req.user
+    });
+    
     if (!req.file) {
+        console.error('No file in request');
         return res.status(400).json({ error: 'No file uploaded' });
     }
     const fileUrl = `/uploads/${req.file.filename}`;
     console.log('File uploaded:', fileUrl);
     res.json({ url: fileUrl });
+});
+
+// Error handling middleware for upload errors
+router.use((err, req, res, next) => {
+    console.error('Upload error:', err);
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'Файл занадто великий (макс. 500MB)' });
+    }
+    res.status(500).json({ error: err.message });
 });
 
 module.exports = router;

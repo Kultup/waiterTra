@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import API_URL from '../api';
+import { useToast } from '../contexts/ToastContext';
 import './QuizBuilder.css';
 
 const QuizBuilder = () => {
+    const toast = useToast();
     const [quizzes, setQuizzes] = useState([]);
     const [editing, setEditing] = useState(null);
     const [collapsedQuestions, setCollapsedQuestions] = useState(new Set());
@@ -122,6 +124,14 @@ const QuizBuilder = () => {
 
     const handleFileUpload = async (qIdx, field, file) => {
         if (!file) return;
+        
+        const isImage = file.type.startsWith('image/');
+        const isVideo = file.type.startsWith('video/');
+        if (!isImage && !isVideo) {
+            toast.error('Будь ласка, виберіть зображення або відео');
+            return;
+        }
+        
         const formData = new FormData();
         formData.append('file', file);
 
@@ -134,14 +144,15 @@ const QuizBuilder = () => {
                 }
             });
             updateQuestion(qIdx, field, res.data.url);
+            toast.success('Файл успішно завантажено!');
         } catch (err) {
             console.error('handleFileUpload:', err);
-            alert('Помилка при завантаженні файлу');
+            toast.error('Помилка: ' + (err.response?.data?.error || err.message));
         }
     };
 
     const handleSave = async () => {
-        if (!editing.title.trim()) { alert('Введіть назву квізу'); return; }
+        if (!editing.title.trim()) { toast.error('Введіть назву квізу'); return; }
         setSaving(true);
         try {
             const token = localStorage.getItem('token');
@@ -158,9 +169,10 @@ const QuizBuilder = () => {
             }
             fetchQuizzes();
             setEditing(null);
+            toast.success('Квіз успішно збережено!');
         } catch (err) {
             console.error('handleSave:', err);
-            alert('Помилка при збереженні');
+            toast.error('Помилка: ' + err.message);
         } finally {
             setSaving(false);
         }
@@ -323,7 +335,7 @@ const QuizBuilder = () => {
                                                         />
                                                         <label className="file-upload-btn" style={{ background: '#333', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                                                             📁
-                                                            <input type="file" accept="video/*" style={{ display: 'none' }} onChange={e => handleFileUpload(qIdx, 'video', e.target.files[0])} />
+                                                            <input type="file" accept="video/*,image/*" style={{ display: 'none' }} onChange={e => handleFileUpload(qIdx, 'video', e.target.files[0])} />
                                                         </label>
                                                     </div>
                                                 </div>

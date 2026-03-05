@@ -3,7 +3,8 @@ const crypto = require('crypto');
 const GameScenario = require('../models/GameScenario');
 const GameLink = require('../models/GameLink');
 const GameResult = require('../models/GameResult');
-const { auth } = require('../middleware/authMiddleware'); // Changed import
+const PageView = require('../models/PageView');
+const { auth } = require('../middleware/authMiddleware');
 
 // ── /api/game-scenarios ───────────────────────────────────────────────────────
 
@@ -14,12 +15,9 @@ scenariosRouter.get('/', auth, async (req, res) => {
   try {
     let query = {};
     if (req.user.role !== 'superadmin') {
-      query = {
-        $or: [
-          { ownerId: req.user._id },
-          { targetCity: req.user.city, targetCity: { $ne: '' } }
-        ]
-      };
+      const orConditions = [{ ownerId: req.user._id }];
+      if (req.user.city) orConditions.push({ targetCity: req.user.city });
+      query = { $or: orConditions };
     }
     const scenarios = await GameScenario.find(query, 'title description targetCity createdAt').sort({ createdAt: -1 }); // Added query and sort
     res.json(scenarios);
@@ -123,13 +121,22 @@ linksRouter.get('/:hash', async (req, res) => {
       scenarioId: link.scenarioId,
       city: link.scenarioId.targetCity || ''
     };
-    
-    console.log('Returning game data:', { 
+
+    // Трекінг відвідування
+    PageView.create({
+      testType: 'game',
+      hash: req.params.hash,
+      ownerId: link.ownerId,
+      city: response.city,
+      ip: req.ip || req.headers['x-forwarded-for'] || ''
+    }).catch(() => {});
+
+    console.log('Returning game data:', {
       scenarioTitle: link.scenarioId.title,
       hasStartNode: !!link.scenarioId.startNodeId,
       city: response.city
     });
-    
+
     res.json(response);
   } catch (error) {
     console.error('Error fetching game link:', error);
@@ -144,6 +151,13 @@ linksRouter.post('/', auth, async (req, res) => {
     return res.status(400).json({ error: 'scenarioId є обов\'язковим' });
   }
   try {
+    // Перевіряємо що сценарій належить цьому користувачу або він superadmin
+    const ownerQuery = req.user.role === 'superadmin'
+      ? { _id: scenarioId }
+      : { _id: scenarioId, ownerId: req.user._id };
+    const scenario = await GameScenario.findOne(ownerQuery);
+    if (!scenario) return res.status(403).json({ error: 'Сценарій не знайдено або немає доступу' });
+
     const hash = crypto.randomBytes(16).toString('hex');
     const link = new GameLink({ scenarioId, hash, ownerId: req.user._id });
     await link.save();
@@ -235,7 +249,14 @@ resultsRouter.post('/', async (req, res) => {
 // Захищений: адмін переглядає результати
 resultsRouter.get('/', auth, async (req, res) => {
   try {
-    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+    let query = {};
+    if (req.user.role === 'superadmin') {
+      query = {};
+    } else if (req.user.role === 'viewer') {
+      query = req.user.city ? { city: req.user.city } : { _id: null };
+    } else {
+      query = { ownerId: req.user._id };
+    }
     const results = await GameResult.find(query).sort({ completedAt: -1 });
     res.json(results);
   } catch (error) {

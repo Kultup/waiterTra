@@ -12,21 +12,21 @@ router.get('/overview', auth, async (req, res) => {
   try {
     const { city, days = 30 } = req.query;
     
-    // Фільтрація по місту
-    const cityFilter = {};
-    if (city) {
-      cityFilter.studentCity = city;
-    } else if (req.user.role !== 'superadmin' && req.user.city) {
-      cityFilter.studentCity = req.user.city;
-    }
-    
+    // Базова фільтрація по ownerId для не-superadmin
+    const ownerFilter = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+
+    // Додаткова фільтрація по місту (лише якщо явно вказано через ?city=)
+    const testFilter = { ...ownerFilter, ...(city ? { studentCity: city } : {}) };
+    const quizFilter = { ...ownerFilter, ...(city ? { studentCity: city } : {}) };
+    const gameFilter = { ...ownerFilter, ...(city ? { city } : {}) };
+
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(days));
-    
+
     const [testResults, gameResults, quizResults] = await Promise.all([
-      TestResult.find(cityFilter).sort({ completedAt: -1 }),
-      GameResult.find(cityFilter ? { playerCity: cityFilter.studentCity } : {}).sort({ completedAt: -1 }),
-      QuizResult.find(cityFilter).sort({ completedAt: -1 })
+      TestResult.find(testFilter).sort({ completedAt: -1 }),
+      GameResult.find(gameFilter).sort({ completedAt: -1 }),
+      QuizResult.find(quizFilter).sort({ completedAt: -1 })
     ]);
     
     const allResults = [
@@ -103,19 +103,17 @@ router.get('/overview', auth, async (req, res) => {
 // Отримати список міст для фільтрів
 router.get('/cities', auth, async (req, res) => {
   try {
-    const TestResult = require('../models/TestResult');
-    const GameResult = require('../models/GameResult');
-    const QuizResult = require('../models/QuizResult');
-    
-    // Отримуємо унікальні міста з результатів
+    const ownerFilter = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+
+    // Отримуємо унікальні міста лише зі своїх результатів
     const [testCities, gameCities, quizCities] = await Promise.all([
-      TestResult.distinct('studentCity'),
-      GameResult.distinct('playerCity'),
-      QuizResult.distinct('studentCity')
+      TestResult.distinct('studentCity', ownerFilter),
+      GameResult.distinct('city', ownerFilter),
+      QuizResult.distinct('studentCity', ownerFilter)
     ]);
-    
-    const allCities = [...new Set([...testCities, ...gameCities, quizCities])].filter(Boolean);
-    
+
+    const allCities = [...new Set([...testCities, ...gameCities, ...quizCities])].filter(Boolean);
+
     res.json(allCities);
   } catch (err) {
     logger.error('Stats cities error:', { error: err.message, stack: err.stack });

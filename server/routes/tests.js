@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const DeskTest = require('../models/DeskTest');
 const MultiDeskTest = require('../models/MultiDeskTest');
 const TestResult = require('../models/TestResult');
+const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -40,6 +41,16 @@ router.get('/multi/:hash', async (req, res) => {
 
     const response = test.toObject();
     response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
+
+    // Трекінг відвідування
+    PageView.create({
+      testType: 'multi-desk',
+      hash: req.params.hash,
+      ownerId: test.ownerId?._id || test.ownerId,
+      city: response.city,
+      ip: req.ip || req.headers['x-forwarded-for'] || ''
+    }).catch(() => {});
+
     res.json(response);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -123,6 +134,16 @@ router.get('/:hash', async (req, res) => {
 
     const response = test.toObject();
     response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
+
+    // Трекінг відвідування
+    PageView.create({
+      testType: 'desk',
+      hash: req.params.hash,
+      ownerId: test.ownerId?._id || test.ownerId,
+      city: response.city,
+      ip: req.ip || req.headers['x-forwarded-for'] || ''
+    }).catch(() => {});
+
     res.json(response);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const Quiz = require('../models/Quiz');
 const QuizResult = require('../models/QuizResult');
 const QuizLink = require('../models/QuizLink');
+const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 
 // Admin: Get all quizzes
@@ -11,12 +12,9 @@ router.get('/', auth, async (req, res) => {
     try {
         let query = {};
         if (req.user.role !== 'superadmin') {
-            query = {
-                $or: [
-                    { ownerId: req.user._id },
-                    { targetCity: req.user.city, targetCity: { $ne: '' } }
-                ]
-            };
+            const orConditions = [{ ownerId: req.user._id }];
+            if (req.user.city) orConditions.push({ city: req.user.city });
+            query = { $or: orConditions };
         }
         const quizzes = await Quiz.find(query).sort({ createdAt: -1 });
         res.json(quizzes);
@@ -28,13 +26,35 @@ router.get('/', auth, async (req, res) => {
 // Admin: Create quiz
 router.post('/', auth, async (req, res) => {
     try {
+        const { title, questions, city, targetCity, timeLimit, passingScore } = req.body;
+
+        // Validate required fields
+        if (!title || !title.trim()) {
+            return res.status(400).json({ error: 'Назва квізу є обов\'язковою' });
+        }
+        if (!Array.isArray(questions) || questions.length === 0) {
+            return res.status(400).json({ error: 'Квіз повинен мати хоча б одне питання' });
+        }
+
+        const hash = crypto.randomBytes(16).toString('hex');
+
+        console.log('Creating quiz:', { title, questionsCount: questions.length, hash });
+
         const quiz = new Quiz({
-            ...req.body,
+            title: title.trim(),
+            city: targetCity || city || '',
+            questions,
+            timeLimit: timeLimit || 300,
+            passingScore: passingScore || 70,
+            hash,
+            isActive: true,
             ownerId: req.user._id
         });
         await quiz.save();
+        console.log('Quiz created:', quiz._id);
         res.json(quiz);
     } catch (err) {
+        console.error('Error creating quiz:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -44,12 +64,15 @@ router.post('/links', auth, async (req, res) => {
     const { quizId } = req.body;
     if (!quizId) return res.status(400).json({ error: 'quizId is required' });
     try {
+        // Перевіряємо що квіз належить цьому користувачу або він superadmin
+        const ownerQuery = req.user.role === 'superadmin'
+            ? { _id: quizId }
+            : { _id: quizId, ownerId: req.user._id };
+        const quiz = await Quiz.findOne(ownerQuery);
+        if (!quiz) return res.status(403).json({ error: 'Квіз не знайдено або немає доступу' });
+
         const hash = crypto.randomBytes(16).toString('hex');
-        const link = new QuizLink({
-            quizId,
-            hash,
-            ownerId: req.user._id
-        });
+        const link = new QuizLink({ quizId, hash, ownerId: req.user._id });
         await link.save();
         res.status(201).json(link);
     } catch (err) {
@@ -61,7 +84,12 @@ router.post('/links', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
     try {
         const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
-        const quiz = await Quiz.findOneAndUpdate(query, req.body, { new: true });
+        const updateData = { ...req.body };
+        if (updateData.targetCity !== undefined) {
+            updateData.city = updateData.targetCity;
+            delete updateData.targetCity;
+        }
+        const quiz = await Quiz.findOneAndUpdate(query, updateData, { new: true });
         if (!quiz) return res.status(404).json({ error: 'Quiz not found or unauthorized' });
         res.json(quiz);
     } catch (err) {
@@ -91,7 +119,17 @@ router.get('/hash/:hash', async (req, res) => {
         if (link.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
 
         const quiz = link.quizId.toObject();
-        quiz.city = quiz.targetCity || (link.ownerId ? link.ownerId.city : '');
+        quiz.city = quiz.city || (link.ownerId ? link.ownerId.city : '');
+
+        // Трекінг відвідування
+        PageView.create({
+            testType: 'quiz',
+            hash: req.params.hash,
+            ownerId: link.ownerId,
+            city: quiz.city,
+            ip: req.ip || req.headers['x-forwarded-for'] || ''
+        }).catch(() => {});
+
         res.json(quiz);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -101,23 +139,35 @@ router.get('/hash/:hash', async (req, res) => {
 // Student: Submit quiz
 router.post('/hash/:hash/submit', async (req, res) => {
     try {
+        console.log('Submitting quiz:', req.params.hash, req.body);
+        
         const link = await QuizLink.findOne({ hash: req.params.hash }).populate('quizId');
-        if (!link) return res.status(404).json({ error: 'Quiz link not found' });
-        if (link.isUsed) return res.status(410).json({ error: 'Цей тест вже пройдено' });
-
-        link.isUsed = true;
-        await link.save();
+        if (!link) {
+            console.error('Quiz link not found:', req.params.hash);
+            return res.status(404).json({ error: 'Quiz link not found' });
+        }
+        if (link.isUsed) {
+            console.log('Quiz already used:', req.params.hash);
+            return res.status(410).json({ error: 'Цей тест вже пройдено' });
+        }
 
         const quiz = link.quizId;
         const { studentName, studentLastName, studentCity, studentPosition, answers } = req.body;
+        
+        if (!studentName || !studentLastName) {
+            return res.status(400).json({ error: 'Ім\'я та прізвище обов\'язкові' });
+        }
+        
         let score = 0;
+        const answersArray = answers || [];
 
         const detailedAnswers = quiz.questions.map((q, idx) => {
-            const isCorrect = answers[idx] === q.correctIndex;
+            const givenAnswerIndex = answersArray[idx];
+            const isCorrect = givenAnswerIndex === q.correctIndex;
             if (isCorrect) score++;
             return {
                 questionText: q.text,
-                givenAnswer: q.options[answers[idx]] || '—',
+                givenAnswer: q.options[givenAnswerIndex] || '—',
                 correctAnswer: q.options[q.correctIndex],
                 explanation: q.explanation,
                 isCorrect
@@ -127,9 +177,9 @@ router.post('/hash/:hash/submit', async (req, res) => {
         const result = new QuizResult({
             quizId: quiz._id,
             ownerId: quiz.ownerId,
-            studentName,
-            studentLastName,
-            studentCity,
+            studentName: String(studentName).trim(),
+            studentLastName: String(studentLastName).trim(),
+            studentCity: String(studentCity || '').trim(),
             studentPosition: String(studentPosition || '').trim(),
             score,
             total: quiz.questions.length,
@@ -138,8 +188,15 @@ router.post('/hash/:hash/submit', async (req, res) => {
         });
 
         await result.save();
+        
+        // Mark link as used after successful save
+        link.isUsed = true;
+        await link.save();
+        
+        console.log('Quiz result saved:', result._id);
         res.json(result);
     } catch (err) {
+        console.error('Error submitting quiz:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -147,7 +204,14 @@ router.post('/hash/:hash/submit', async (req, res) => {
 // Admin: Get all results
 router.get('/results', auth, async (req, res) => {
     try {
-        const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+        let query = {};
+        if (req.user.role === 'superadmin') {
+            query = {};
+        } else if (req.user.role === 'viewer') {
+            query = req.user.city ? { studentCity: req.user.city } : { _id: null };
+        } else {
+            query = { ownerId: req.user._id };
+        }
         const results = await QuizResult.find(query).populate('quizId', 'title').sort({ completedAt: -1 });
         res.json(results);
     } catch (err) {

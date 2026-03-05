@@ -15,13 +15,14 @@ const deskItemSchema = new mongoose.Schema({
 
 const deskTemplateSchema = new mongoose.Schema({
     templateName: { type: String, required: true },
-    city: { type: String, default: '' },
-    items: [deskItemSchema],
+    city: { type: String, default: '' },       // legacy
+    targetCity: { type: String, default: '' }, // використовується в роутах
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    items: [deskItemSchema],
     createdAt: { type: Date, default: Date.now }
 });
 
-deskTemplateSchema.index({ city: 1, createdAt: -1 });
-deskTemplateSchema.index({ ownerId: 1 });
+deskTemplateSchema.index({ ownerId: 1, createdAt: -1 });
+deskTemplateSchema.index({ targetCity: 1, createdAt: -1 });
 
 module.exports = mongoose.model('DeskTemplate', deskTemplateSchema);
