@@ -32,7 +32,11 @@ router.post('/', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    await DeskItem.findByIdAndDelete(req.params.id);
+    const query = req.user.role === 'superadmin'
+      ? { _id: req.params.id }
+      : { _id: req.params.id, ownerId: req.user._id };
+    const item = await DeskItem.findOneAndDelete(query);
+    if (!item) return res.status(404).json({ error: 'Item not found or unauthorized' });
     res.json({ message: 'Item deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });

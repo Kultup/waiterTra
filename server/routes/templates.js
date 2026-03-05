@@ -10,12 +10,9 @@ router.get('/', auth, async (req, res) => {
   try {
     let query = {};
     if (req.user.role !== 'superadmin') {
-      query = {
-        $or: [
-          { ownerId: req.user._id },
-          { targetCity: req.user.city, targetCity: { $ne: '' } }
-        ]
-      };
+      const orConditions = [{ ownerId: req.user._id }];
+      if (req.user.city) orConditions.push({ targetCity: req.user.city });
+      query = { $or: orConditions };
     }
     const templates = await DeskTemplate.find(query).sort({ createdAt: -1 });
     res.json(templates);

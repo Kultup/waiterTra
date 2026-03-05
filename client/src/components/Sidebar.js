@@ -6,6 +6,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user })
   const mainMenu = [
     { id: 'dashboard', label: 'Панель', icon: '📊', roles: ['superadmin', 'admin', 'trainer', 'viewer'] },
     { id: 'test-results', label: 'Результати', icon: '✅', roles: ['superadmin', 'admin', 'trainer', 'viewer'] },
+    { id: 'analytics', label: 'Аналітика', icon: '📈', roles: ['localadmin'] },
   ];
 
   // Створення тестів (тільки для адмінів та тренерів)

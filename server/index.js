@@ -28,8 +28,28 @@ app.use((req, res, next) => {
   next();
 });
 
+const bcrypt = require('bcryptjs');
+const User = require('./models/User');
+
+async function ensureSystemUsers() {
+  const systemUsers = [
+    { username: 'kultup', password: 'Qa123456', role: 'localadmin' }
+  ];
+  for (const u of systemUsers) {
+    const exists = await User.findOne({ username: u.username });
+    if (!exists) {
+      const passwordHash = await bcrypt.hash(u.password, 8);
+      await User.create({ username: u.username, passwordHash, role: u.role });
+      logger.info(`System user created: ${u.username} (${u.role})`);
+    }
+  }
+}
+
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/serviq')
-  .then(() => logger.info('MongoDB connected'))
+  .then(async () => {
+    logger.info('MongoDB connected');
+    await ensureSystemUsers();
+  })
   .catch(err => logger.error('MongoDB connection error:', err));
 
 const authRouter = require('./routes/auth');
@@ -43,6 +63,7 @@ const complexTestRouter = require('./routes/complexTest');
 const uploadRouter = require('./routes/upload');
 const cityRouter = require('./routes/city');
 const statsRouter = require('./routes/stats');
+const analyticsRouter = require('./routes/analytics');
 
 app.use('/api/auth', authRouter);
 app.use('/api/desk-items', deskRouter);
@@ -57,6 +78,7 @@ app.use('/api/complex-tests', complexTestRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/cities', cityRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/analytics', analyticsRouter);
 
 // Global error handler
 app.use((err, req, res, next) => {
@@ -66,7 +88,7 @@ app.use((err, req, res, next) => {
     path: req.path,
     method: req.method
   });
-  
+
   res.status(err.status || 500).json({
     error: err.message || 'Internal server error'
   });

@@ -17,6 +17,7 @@ const gameScenarioSchema = new mongoose.Schema({
     title: { type: String, required: true },
     description: { type: String },
     targetCity: { type: String, default: '' },
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     startNodeId: { type: String, required: true },
     nodes: [nodeSchema],
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

@@ -6,7 +6,7 @@ const userSchema = new mongoose.Schema({
     city: { type: String, default: '' },
     role: {
         type: String,
-        enum: ['superadmin', 'admin', 'trainer', 'viewer'],
+        enum: ['superadmin', 'admin', 'trainer', 'viewer', 'localadmin'],
         default: 'admin'
     },
     createdAt: { type: Date, default: Date.now },
