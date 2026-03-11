@@ -109,7 +109,7 @@ router.get('/available-items', auth, async (req, res) => {
     try {
         const ownerQuery = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
         const [templates, scenarios, quizzes] = await Promise.all([
-            DeskTemplate.find(ownerQuery, 'name timeLimit items').sort({ createdAt: -1 }),
+            DeskTemplate.find(ownerQuery, 'templateName timeLimit items').sort({ createdAt: -1 }),
             GameScenario.find(ownerQuery, 'title description').sort({ createdAt: -1 }),
             Quiz.find(ownerQuery, 'title timeLimit questions').sort({ createdAt: -1 })
         ]);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './ComplexTestBuilder.css';
 import API_URL from '../api';
+import ConfirmModal from './ConfirmModal';
 
 const typeLabels = { desk: '🖥️ Сервіровка', game: '🎮 Гра', quiz: '📝 Квіз' };
 
@@ -20,6 +21,7 @@ const ComplexTestBuilder = () => {
     const [copyStatus, setCopyStatus] = useState(null);
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
 
     useEffect(() => {
         fetchUser();
@@ -65,7 +67,7 @@ const ComplexTestBuilder = () => {
         const step = {
             type,
             refId: item._id,
-            title: item.name || item.title,
+            title: item.title || item.name || item.templateName,
             timeLimit: item.timeLimit || 0
         };
         setSteps(prev => [...prev, step]);
@@ -123,8 +125,10 @@ const ComplexTestBuilder = () => {
         setTargetCity(test.targetCity || '');
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('Видалити комплексний тест?')) return;
+    const handleConfirmDelete = async () => {
+        const id = confirmModal.idToDelete;
+        if (!id) return;
+        setConfirmModal({ isOpen: false, idToDelete: null });
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/complex-tests/${id}`, {
@@ -283,7 +287,7 @@ const ComplexTestBuilder = () => {
                                                 <button onClick={() => handleCopyLink(test._id)} title="Скопіювати посилання">📋</button>
                                             )}
                                             <button onClick={() => handleEdit(test)} title="Редагувати">✏️</button>
-                                            <button className="btn-delete" onClick={() => handleDelete(test._id)} title="Видалити">×</button>
+                                            <button className="btn-delete" onClick={() => setConfirmModal({ isOpen: true, idToDelete: test._id })} title="Видалити">×</button>
                                         </div>
                                     </div>
                                 ));
@@ -302,7 +306,7 @@ const ComplexTestBuilder = () => {
                             ) : available.templates.map(t => (
                                 <div key={t._id} className="sidebar-item" onClick={() => addStep('desk', t)}>
                                     <span className="item-icon">🍽️</span>
-                                    <span className="item-title">{t.name}</span>
+                                    <span className="item-title">{t.templateName || t.name}</span>
                                 </div>
                             ))}
                         </div>
@@ -337,6 +341,15 @@ const ComplexTestBuilder = () => {
                     </div>
                 </aside>
             </div>
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title="Видалення комплексного тесту"
+                message="Ви впевнені, що хочете видалити цей комплексний тест? Цю дію неможливо скасувати."
+                confirmText="Видалити"
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setConfirmModal({ isOpen: false, idToDelete: null })}
+            />
         </div>
     );
 };

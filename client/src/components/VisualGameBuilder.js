@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { utils, read } from 'xlsx';
 import API_URL from '../api';
+import ConfirmModal from './ConfirmModal';
 import './VisualGameBuilder.css';
 
 const genNodeId = () => `n_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
@@ -35,6 +36,7 @@ const VisualGameBuilder = () => {
     const [importData, setImportData] = useState(null);
     const [importError, setImportError] = useState('');
     const [importSuccess, setImportSuccess] = useState('');
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
 
     const canvasRef = useRef(null);
     const minimapRef = useRef(null);
@@ -100,6 +102,21 @@ const VisualGameBuilder = () => {
         } catch (err) {
             console.error('handleCopyLink:', err);
             alert('Помилка копіювання');
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        const id = confirmModal.idToDelete;
+        if (!id) return;
+        setConfirmModal({ isOpen: false, idToDelete: null });
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/game-scenarios/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            fetchScenarios();
+        } catch (err) {
+            console.error('Delete error', err);
         }
     };
 
@@ -1022,6 +1039,15 @@ const VisualGameBuilder = () => {
         }
     };
 
+    // Node geometry constants (must match CSS):
+    //   header: 44px, body-padding: 10+10=20px, text-block: ~52px
+    //   choices-border: 1px, choices-top-pad: 4px, each row: 30px
+    //   choice-center from top = 44+10+52+10+1+4+15 + i*30 = 136 + i*30
+    const NODE_W       = 260;
+    const CHOICE_BASE_Y = 136;
+    const CHOICE_STEP   = 30;
+    const INPUT_PORT_Y  = 22; // center of header
+
     const renderConnections = () => {
         if (!editing) return null;
         const connections = [];
@@ -1031,18 +1057,23 @@ const VisualGameBuilder = () => {
                 const target = editing.nodes.find(n => n.nodeId === choice.nextNodeId);
                 if (!target) return;
 
-                const startX = node.x + 240;
-                const startY = node.y + 55 + (i * 28);
-                const endX = target.x;
-                const endY = target.y + 40;
+                const startX = node.x + NODE_W + 5;
+                const startY = node.y + CHOICE_BASE_Y + i * CHOICE_STEP;
+                const endX   = target.x - 5;
+                const endY   = target.y + INPUT_PORT_Y;
 
-                const controlPointOffset = Math.abs(endX - startX) * 0.5;
-                const path = `M ${startX} ${startY} C ${startX + controlPointOffset} ${startY}, ${endX - controlPointOffset} ${endY}, ${endX} ${endY}`;
+                const cpOff = Math.max(60, Math.abs(endX - startX) * 0.45);
+                const path  = `M ${startX} ${startY} C ${startX + cpOff} ${startY}, ${endX - cpOff} ${endY}, ${endX} ${endY}`;
+
+                const connClass = choice.isWin
+                    ? 'n8n-connection n8n-connection-win'
+                    : (choice.result ? 'n8n-connection n8n-connection-lose' : 'n8n-connection n8n-connection-normal');
+                const marker = choice.isWin ? 'url(#arrow-win)' : (choice.result ? 'url(#arrow-lose)' : 'url(#arrow)');
 
                 connections.push(
                     <g key={`${node.nodeId}-${choice.choiceId || i}`}>
-                        <path d={path} className="n8n-connection-bg" />
-                        <path d={path} className="n8n-connection" />
+                        <path d={path} className="n8n-connection-shadow" />
+                        <path d={path} className={connClass} markerEnd={marker} />
                     </g>
                 );
             });
@@ -1052,15 +1083,30 @@ const VisualGameBuilder = () => {
             const node = editing.nodes.find(n => n.nodeId === linkingFrom.nodeId);
             if (node) {
                 const i = node.choices.findIndex(c => c.choiceId === linkingFrom.choiceId);
-                const startX = node.x + 240;
-                const startY = node.y + 55 + (i * 28);
-                const controlPointOffset = Math.abs(mousePos.x - startX) * 0.5;
-                const path = `M ${startX} ${startY} C ${startX + controlPointOffset} ${startY}, ${mousePos.x - controlPointOffset} ${mousePos.y}, ${mousePos.x} ${mousePos.y}`;
-                connections.push(<path key="ghost" d={path} className="n8n-connection-ghost" />);
+                const startX = node.x + NODE_W + 5;
+                const startY = node.y + CHOICE_BASE_Y + i * CHOICE_STEP;
+                const cpOff  = Math.max(60, Math.abs(mousePos.x - startX) * 0.45);
+                const path   = `M ${startX} ${startY} C ${startX + cpOff} ${startY}, ${mousePos.x - cpOff} ${mousePos.y}, ${mousePos.x} ${mousePos.y}`;
+                connections.push(<path key="ghost" d={path} className="n8n-connection-ghost" markerEnd="url(#arrow)" />);
             }
         }
 
-        return <svg className="n8n-connections">{connections}</svg>;
+        return (
+            <svg className="n8n-connections">
+                <defs>
+                    <marker id="arrow"      markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L7,3 z" fill="#475569" />
+                    </marker>
+                    <marker id="arrow-win"  markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L7,3 z" fill="#4ade80" />
+                    </marker>
+                    <marker id="arrow-lose" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L7,3 z" fill="#f87171" />
+                    </marker>
+                </defs>
+                {connections}
+            </svg>
+        );
     };
 
     const renderMinimap = () => {
@@ -1142,18 +1188,21 @@ const VisualGameBuilder = () => {
                                     </button>
                                     <button className="n8n-icon-btn" onClick={() => openEdit(s._id)} title="Редагувати">✏️</button>
                                     <button className="n8n-icon-btn n8n-icon-danger" onClick={() => {
-                                        if (window.confirm('Видалити сценарій?')) {
-                                            const token = localStorage.getItem('token');
-                                            axios.delete(`${API_URL}/game-scenarios/${s._id}`, {
-                                                headers: { Authorization: `Bearer ${token}` }
-                                            }).then(fetchScenarios);
-                                        }
+                                        setConfirmModal({ isOpen: true, idToDelete: s._id });
                                     }} title="Видалити">🗑️</button>
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
+                <ConfirmModal
+                    isOpen={confirmModal.isOpen}
+                    title="Видалення сценарію"
+                    message="Ви впевнені, що хочете видалити цей ігровий сценарій? Цю дію неможливо скасувати."
+                    confirmText="Видалити"
+                    onConfirm={handleConfirmDelete}
+                    onCancel={() => setConfirmModal({ isOpen: false, idToDelete: null })}
+                />
             </div>
         );
     }
@@ -1218,9 +1267,16 @@ const VisualGameBuilder = () => {
                         >
                             {renderConnections()}
                             {editing.nodes.map(node => {
-                                const speaker = node.speakerId ? editing.characters.find(c => c.charId === node.speakerId) : null;
+                                const speaker   = node.speakerId ? editing.characters.find(c => c.charId === node.speakerId) : null;
                                 const isSelected = selectedNodeId === node.nodeId;
-                                const isStart = editing.startNodeId === node.nodeId;
+                                const isStart    = editing.startNodeId === node.nodeId;
+
+                                const iconBoxBg = isStart
+                                    ? 'rgba(74,222,128,0.15)'
+                                    : speaker?.color
+                                        ? speaker.color + '26'
+                                        : 'rgba(71,85,105,0.4)';
+                                const iconBoxColor = isStart ? '#4ade80' : (speaker?.color || '#94a3b8');
 
                                 return (
                                     <div
@@ -1231,35 +1287,67 @@ const VisualGameBuilder = () => {
                                         onMouseEnter={() => setNodeHover(node.nodeId)}
                                         onMouseLeave={() => setNodeHover(null)}
                                     >
-                                        {speaker && (
-                                            <div className="n8n-node-speaker" style={{ background: speaker.color }}>
-                                                {speaker.avatar}
-                                            </div>
-                                        )}
-                                        <div className="n8n-node-input-port"></div>
+                                        {/* Input port */}
+                                        <div className="n8n-port-in" />
+
+                                        {/* Header */}
                                         <div className="n8n-node-header">
-                                            <span className="n8n-node-icon">{isStart ? '🚀' : '📝'}</span>
-                                            <span className="n8n-node-type">{isStart ? 'START' : 'SCENE'}</span>
+                                            <div className="n8n-node-icon-box" style={{ background: iconBoxBg, color: iconBoxColor }}>
+                                                {isStart ? '🚀' : (speaker?.avatar || '📝')}
+                                            </div>
+                                            <div className="n8n-node-title">
+                                                <span className="n8n-node-name" style={{ color: iconBoxColor }}>
+                                                    {isStart ? 'START' : 'SCENE'}
+                                                </span>
+                                                {speaker && (
+                                                    <span className="n8n-node-speaker-name">{speaker.name}</span>
+                                                )}
+                                            </div>
                                         </div>
+
+                                        {/* Body */}
                                         <div className="n8n-node-body">
                                             <div className="n8n-node-text">{node.text}</div>
-                                            {node.choices.length > 0 && (
-                                                <div className="n8n-node-outputs">
-                                                    {node.choices.map((c, i) => (
-                                                        <div key={c.choiceId || i} className="n8n-output-port" style={{ top: 50 + i * 28 }}>
-                                                            <span className="n8n-output-label">{String.fromCharCode(65 + i)}</span>
-                                                            <div className={`n8n-output-dot ${c.nextNodeId ? 'connected' : ''}`}></div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
                                         </div>
-                                        <div className="n8n-node-output-port"></div>
 
+                                        {/* Choice rows with output ports */}
+                                        {node.choices.length > 0 && (
+                                            <div className="n8n-node-choices">
+                                                {node.choices.map((c, i) => {
+                                                    const portClass = [
+                                                        'n8n-port-out',
+                                                        c.nextNodeId ? 'connected' : '',
+                                                        c.isWin ? 'win' : '',
+                                                        (c.result && !c.isWin) ? 'lose' : '',
+                                                        linkingFrom?.choiceId === c.choiceId ? 'linking' : ''
+                                                    ].filter(Boolean).join(' ');
+                                                    return (
+                                                        <div key={c.choiceId || i} className="n8n-choice-row">
+                                                            <span className="n8n-choice-letter">{String.fromCharCode(65 + i)}</span>
+                                                            <span className="n8n-choice-text-preview">{c.text}</span>
+                                                            <div
+                                                                className={portClass}
+                                                                title={c.nextNodeId ? 'З\'єднано' : 'Клік → зв\'язати'}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (linkingFrom?.choiceId === c.choiceId) {
+                                                                        setLinkingFrom(null);
+                                                                    } else {
+                                                                        setLinkingFrom({ nodeId: node.nodeId, choiceId: c.choiceId });
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Quick actions on hover */}
                                         {nodeHover === node.nodeId && (
                                             <div className="n8n-node-quick-actions">
-                                                <button onClick={(e) => { e.stopPropagation(); setAsStart(node.nodeId); }} title="Встановити як початковий">🚀</button>
-                                                <button onClick={(e) => { e.stopPropagation(); deleteNode(node.nodeId); }} title="Видалити вузол">🗑️</button>
+                                                <button onClick={(e) => { e.stopPropagation(); setAsStart(node.nodeId); }} title="Початковий">🚀</button>
+                                                <button className="qa-delete" onClick={(e) => { e.stopPropagation(); deleteNode(node.nodeId); }} title="Видалити">🗑</button>
                                             </div>
                                         )}
                                     </div>

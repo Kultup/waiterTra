@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import API_URL from '../api';
+import ConfirmModal from './ConfirmModal';
 import './UserManager.css';
 
 const UserManager = () => {
@@ -10,6 +11,7 @@ const UserManager = () => {
     const [newUser, setNewUser] = useState({ username: '', password: '', role: 'admin', city: '' });
     const [editingUser, setEditingUser] = useState(null);
     const [cities, setCities] = useState([]);
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
 
     useEffect(() => {
         fetchUsers();
@@ -53,8 +55,14 @@ const UserManager = () => {
         }
     };
 
-    const handleDeleteUser = async (id) => {
-        if (!window.confirm('Ви впевнені?')) return;
+    const handleDeleteClick = (id) => {
+        setConfirmModal({ isOpen: true, idToDelete: id });
+    };
+
+    const handleConfirmDelete = async () => {
+        const id = confirmModal.idToDelete;
+        if (!id) return;
+        setConfirmModal({ isOpen: false, idToDelete: null });
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/auth/users/${id}`, {
@@ -206,7 +214,7 @@ const UserManager = () => {
                                             </button>
                                             <button
                                                 className="btn-delete"
-                                                onClick={() => handleDeleteUser(u._id)}
+                                                onClick={() => handleDeleteClick(u._id)}
                                             >
                                                 🗑️
                                             </button>
@@ -272,6 +280,15 @@ const UserManager = () => {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title="Видалення користувача"
+                message="Ви впевнені, що хочете видалити цього користувача? Цю дію неможливо скасувати."
+                confirmText="Видалити"
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setConfirmModal({ isOpen: false, idToDelete: null })}
+            />
         </div>
     );
 };

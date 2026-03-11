@@ -3,15 +3,6 @@ import axios from 'axios';
 import './VirtualDesk.css';
 import API_URL from '../api';
 
-const dishList = [
-    { id: 'plate', name: 'Тарілка', icon: '🍽️' },
-    { id: 'glass', name: 'Склянка', icon: '🍷' },
-    { id: 'fork', name: 'Виделка', icon: '🍴' },
-    { id: 'knife', name: 'Ніж', icon: '🔪' },
-    { id: 'spoon', name: 'Ложка', icon: '🥄' },
-    { id: 'coffee', name: 'Кава', icon: '☕' },
-];
-
 const Modal = ({ show, title, onClose, onConfirm, children }) => {
     if (!show) return null;
     return (
@@ -34,7 +25,8 @@ const Modal = ({ show, title, onClose, onConfirm, children }) => {
 const VirtualDesk = () => {
     const [items, setItems] = useState([]);
     const [templates, setTemplates] = useState([]);
-    const [selectedDish, setSelectedDish] = useState(dishList[0]);
+    const [dishes, setDishes] = useState([]);
+    const [selectedDish, setSelectedDish] = useState(null);
     const [editingTemplateId, setEditingTemplateId] = useState(null);
     const [templateName, setTemplateName] = useState('');
     const [timeLimit, setTimeLimit] = useState(0);
@@ -45,7 +37,6 @@ const VirtualDesk = () => {
     const [copyStatus, setCopyStatus] = useState(null);
     const [multiCopyStatus, setMultiCopyStatus] = useState(false);
     const [templatesOpen, setTemplatesOpen] = useState(true);
-
     const [modalConfig, setModalConfig] = useState({
         show: false, title: '', type: '', data: null
     });
@@ -55,6 +46,7 @@ const VirtualDesk = () => {
         fetchItems();
         fetchTemplates();
         fetchCities();
+        fetchDishes();
     }, []);
 
     const fetchUser = async () => {
@@ -96,14 +88,26 @@ const VirtualDesk = () => {
         } catch (err) { console.error(err); }
     };
 
+    const fetchDishes = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/dishes`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setDishes(res.data);
+            if (res.data.length > 0) setSelectedDish(res.data[0]);
+        } catch (err) { console.error(err); }
+    };
+
     const handleDeskClick = async (e) => {
+        if (!selectedDish) return;
         const rect = e.currentTarget.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 500;
         const y = ((e.clientY - rect.top) / rect.height) * 500;
         try {
             const token = localStorage.getItem('token');
             const res = await axios.post(`${API_URL}/desk-items`, {
-                name: selectedDish.name, icon: selectedDish.icon, x, y, type: selectedDish.id
+                name: selectedDish.name, icon: selectedDish.icon, x, y, type: selectedDish._id || 'custom'
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -126,15 +130,42 @@ const VirtualDesk = () => {
         setModalConfig({ show: true, title: 'Очистити стіл', type: 'clear', data: null });
     };
 
-    const handleSaveTemplateClick = () => {
-        if (!editingTemplateId) {
-            setTemplateName('');
-            setTimeLimit(0);
-            setTargetCity('');
+    const handleSaveTemplateClick = async () => {
+        if (editingTemplateId) {
+            // Зберегти відразу без модалки
+            if (!templateName.trim()) { alert('Введіть назву шаблону'); return; }
+            try {
+                const token = localStorage.getItem('token');
+                const config = { headers: { Authorization: `Bearer ${token}` } };
+                const payload = {
+                    templateName: templateName.trim(),
+                    name: templateName.trim(),
+                    items: items.map(({ name, icon, x, y, type, id, width, height }) => ({
+                        id: id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                        name,
+                        icon: icon || dishes.find(d => String(d._id) === String(type))?.icon || '🍽️',
+                        x, y, type, width: width || 100, height: height || 100
+                    })),
+                    timeLimit,
+                    targetCity: user?.role === 'superadmin' ? targetCity : undefined
+                };
+                
+                await axios.put(`${API_URL}/templates/${editingTemplateId}`, payload, config);
+                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
+                fetchTemplates();
+            } catch (e) {
+                console.error(e);
+                alert('Помилка при оновленні шаблону');
+            }
+            return;
         }
+
+        setTemplateName('');
+        setTimeLimit(0);
+        setTargetCity('');
         setModalConfig({
             show: true,
-            title: editingTemplateId ? 'Оновити шаблон' : 'Зберегти як шаблон',
+            title: 'Зберегти як шаблон',
             type: 'save', data: null
         });
     };
@@ -153,35 +184,37 @@ const VirtualDesk = () => {
                     items: items.map(({ name, icon, x, y, type, id, width, height }) => ({
                         id: id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                         name,
-                        icon,
-                        x,
-                        y,
-                        type,
-                        width: width || 100,
-                        height: height || 100
+                        icon: icon || dishes.find(d => String(d._id) === String(type))?.icon || '🍽️',
+                        x, y, type, width: width || 100, height: height || 100
                     })),
                     timeLimit,
                     targetCity: user?.role === 'superadmin' ? targetCity : undefined
                 };
-                if (editingTemplateId) {
-                    await axios.put(`${API_URL}/templates/${editingTemplateId}`, payload, config);
-                } else {
-                    await axios.post(`${API_URL}/templates`, payload, config);
-                }
+                await axios.post(`${API_URL}/templates`, payload, config);
+                
                 setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
                 fetchTemplates();
             } else if (type === 'load' || type === 'edit') {
                 const template = data;
                 if (type === 'edit') {
                     setEditingTemplateId(template._id);
-                    setTemplateName(template.name);
+                    setTemplateName(template.templateName || template.name || '');
                     setTimeLimit(template.timeLimit || 0);
                     setTargetCity(template.targetCity || '');
                 } else {
                     setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
                 }
-                await Promise.all(items.map(i => axios.delete(`${API_URL}/desk-items/${i._id}`, config)));
-                const newItems = await Promise.all(template.items.map(i => axios.post(`${API_URL}/desk-items`, i, config)));
+                
+                // ATOMIC BULK CLEAR: Clear all items from DB using the new endpoint
+                await axios.delete(`${API_URL}/desk-items`, config);
+
+                const filteredTemplateItems = template.items.filter(i => 
+                    dishes.some(d => String(d._id) === String(i.type))
+                );
+                const newItems = await Promise.all(filteredTemplateItems.map(i => {
+                    const fallbackIcon = i.icon || dishes.find(d => String(d._id) === String(i.type))?.icon || '🍽️';
+                    return axios.post(`${API_URL}/desk-items`, { ...i, icon: fallbackIcon }, config);
+                }));
                 setItems(newItems.map(r => r.data));
             } else if (type === 'delete') {
                 await axios.delete(`${API_URL}/templates/${data}`, config);
@@ -190,6 +223,7 @@ const VirtualDesk = () => {
                     setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
                 }
             } else if (type === 'clear') {
+                await axios.delete(`${API_URL}/desk-items`, config);
                 setItems([]);
                 setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
             }
@@ -247,20 +281,93 @@ const VirtualDesk = () => {
         } catch (e) { alert('Помилка при створенні посилання'); }
     };
 
+    const handleExportTemplate = (template) => {
+        try {
+            const dataStr = JSON.stringify(template, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `template_${template.name || template.templateName || 'export'}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error('Export error:', e);
+            alert('Помилка при експорті шаблону');
+        }
+    };
+
+    const handleImportTemplate = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const importedData = JSON.parse(event.target.result);
+                const token = localStorage.getItem('token');
+                
+                // Clean up imported data so we can create it as new
+                const payload = {
+                    templateName: importedData.templateName || importedData.name || 'Імпортований шаблон',
+                    name: importedData.name || importedData.templateName || 'Імпортований шаблон',
+                    items: importedData.items || [],
+                    timeLimit: importedData.timeLimit || 0,
+                    targetCity: user?.role === 'superadmin' ? (importedData.targetCity || '') : undefined
+                };
+
+                await axios.post(`${API_URL}/templates`, payload, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                
+                fetchTemplates();
+                alert('Шаблон успішно імпортовано!');
+            } catch (err) {
+                console.error('Import error:', err);
+                alert('Помилка при читанні файлу шаблону. Переконайтеся, що це коректний JSON.');
+            }
+        };
+        reader.readAsText(file);
+        // Reset file input
+        e.target.value = '';
+    };
+
     return (
         <div className="virtual-desk-container">
 
             {/* ── Header ── */}
             <header className="desk-header">
                 <div className="header-info">
-                    <h1>
-                        {editingTemplateId ? `✏️ ${templateName}` : '🍽️ Сервірування'}
-                    </h1>
-                    <p>
-                        {editingTemplateId
-                            ? 'Редагування шаблону — змініть предмети та збережіть'
-                            : `На столі: ${items.length} предмет${items.length === 1 ? '' : items.length < 5 ? 'и' : 'ів'}`}
-                    </p>
+                    {editingTemplateId ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '1.5rem' }}>✏️</span>
+                                <input
+                                    type="text"
+                                    value={templateName}
+                                    onChange={e => setTemplateName(e.target.value)}
+                                    placeholder="Назва шаблону..."
+                                    style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', fontSize: '1rem', minWidth: '200px' }}
+                                />
+                                <input
+                                    type="number"
+                                    value={timeLimit}
+                                    onChange={e => setTimeLimit(parseInt(e.target.value) || 0)}
+                                    placeholder="Час (хв)"
+                                    title="Час на проходження (хв, 0 — без обмежень)"
+                                    style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', fontSize: '1rem', width: '80px' }}
+                                />
+                            </div>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#aaa' }}>Редагування шаблону — змініть предмети та оновіть</p>
+                        </div>
+                    ) : (
+                        <>
+                            <h1>🍽️ Сервірування</h1>
+                            <p>На столі: {items.length} предмет{items.length === 1 ? '' : items.length < 5 ? 'ї' : 'ів'}</p>
+                        </>
+                    )}
                 </div>
 
                 {user?.role === 'superadmin' && (
@@ -305,17 +412,21 @@ const VirtualDesk = () => {
                 <aside className="desk-panel inventory-panel">
                     <div className="panel-label">Посуд</div>
                     <div className="inventory-grid">
-                        {dishList.map(dish => (
-                            <div
-                                key={dish.id}
-                                className={`inv-item ${selectedDish.id === dish.id ? 'active' : ''}`}
-                                onClick={() => setSelectedDish(dish)}
-                                title={dish.name}
-                            >
-                                <span className="inv-icon">{dish.icon}</span>
-                                <span className="inv-name">{dish.name}</span>
-                            </div>
-                        ))}
+                        {dishes.length === 0 ? (
+                            <p style={{ gridColumn: '1/-1', textAlign: 'center', color: '#888', padding: '20px 0' }}>Товарів немає. Додайте в меню "Посуд".</p>
+                        ) : (
+                            dishes.map(dish => (
+                                <div
+                                    key={dish._id}
+                                    className={`inv-item ${selectedDish?._id === dish._id ? 'active' : ''}`}
+                                    onClick={() => setSelectedDish(dish)}
+                                    title={dish.name}
+                                >
+                                    <span className="inv-icon">{dish.icon}</span>
+                                    <span className="inv-name">{dish.name}</span>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </aside>
 
@@ -332,7 +443,9 @@ const VirtualDesk = () => {
                                 }}
                                 onClick={e => e.stopPropagation()}
                             >
-                                <span className="item-icon">{item.icon || '🍽️'}</span>
+                                <span className="item-icon">
+                                    {item.icon || dishes.find(d => String(d._id) === String(item.type))?.icon || '🍽️'}
+                                </span>
                                 <span className="item-text">{item.name}</span>
                                 <button className="item-delete" onClick={e => handleDeleteItem(e, item._id)}>×</button>
                             </div>
@@ -363,6 +476,13 @@ const VirtualDesk = () => {
                     )}
                     {templatesOpen && (
                         <div className="templates-list-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                            <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
+                                <label className="btn-all-link" style={{ flex: 1, textAlign: 'center', margin: 0, cursor: 'pointer' }}>
+                                    📥 Імпорт шаблону
+                                    <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportTemplate} />
+                                </label>
+                            </div>
+                            
                             {user?.role === 'superadmin' && (
                                 <div className="city-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '10px' }}>
                                     <span style={{ fontSize: '0.75rem', color: '#aaa', whiteSpace: 'nowrap' }}>📍 Місто:</span>
@@ -409,6 +529,7 @@ const VirtualDesk = () => {
                                                     <button className="tpl-btn" title="Скопіювати посилання" onClick={e => { e.stopPropagation(); handleCopyLink(t._id); }}>📋</button>
                                                 )}
                                                 <button className="tpl-btn" title="Telegram" onClick={e => { e.stopPropagation(); handleShareTelegram(t._id); }}>✈️</button>
+                                                <button className="tpl-btn" title="Експорт" onClick={e => { e.stopPropagation(); handleExportTemplate(t); }}>💾</button>
                                                 <button className="tpl-btn" title="Редагувати" onClick={e => { e.stopPropagation(); setModalConfig({ show: true, title: 'Редагувати шаблон', type: 'edit', data: t }); }}>✏️</button>
                                                 <button className="tpl-btn tpl-btn-delete" title="Видалити" onClick={e => { e.stopPropagation(); setModalConfig({ show: true, title: 'Видалити шаблон', type: 'delete', data: t._id }); }}>×</button>
                                             </div>

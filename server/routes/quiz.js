@@ -26,7 +26,7 @@ router.get('/', auth, async (req, res) => {
 // Admin: Create quiz
 router.post('/', auth, async (req, res) => {
     try {
-        const { title, questions, city, targetCity, timeLimit, passingScore } = req.body;
+        const { title, description, questions, city, targetCity, timeLimit, passingScore } = req.body;
 
         // Validate required fields
         if (!title || !title.trim()) {
@@ -42,6 +42,7 @@ router.post('/', auth, async (req, res) => {
 
         const quiz = new Quiz({
             title: title.trim(),
+            description: description || '',
             city: targetCity || city || '',
             questions,
             timeLimit: timeLimit || 300,

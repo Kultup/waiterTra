@@ -5,14 +5,7 @@ import './VirtualDesk.css';
 import './MultiDeskTest.css';
 import API_URL from '../api';
 
-const dishList = [
-    { id: 'plate', name: 'Тарілка', icon: '🍽️' },
-    { id: 'glass', name: 'Склянка', icon: '🍷' },
-    { id: 'fork', name: 'Виделка', icon: '🍴' },
-    { id: 'knife', name: 'Ніж', icon: '🔪' },
-    { id: 'spoon', name: 'Ложка', icon: '🥄' },
-    { id: 'coffee', name: 'Кава', icon: '☕' },
-];
+// Removed hardcoded dishList. Fetching dynamically now.
 
 const MultiDeskTest = () => {
     const { hash } = useParams();
@@ -27,7 +20,8 @@ const MultiDeskTest = () => {
     // Step state
     const [currentStep, setCurrentStep] = useState(0);
     const [items, setItems] = useState([]);
-    const [selectedDish, setSelectedDish] = useState(dishList[0]);
+    const [dishes, setDishes] = useState([]);
+    const [selectedDish, setSelectedDish] = useState(null);
     const [stepResults, setStepResults] = useState([]);
     const [stepResult, setStepResult] = useState(null);
 
@@ -40,15 +34,25 @@ const MultiDeskTest = () => {
     const [serverResults, setServerResults] = useState(null);
 
     useEffect(() => {
-        const fetchTest = async () => {
+        const fetchData = async () => {
             try {
-                const res = await axios.get(`${API_URL}/tests/multi/${hash}`);
-                setTestData(res.data);
-                if (res.data.city) {
-                    setStudentInfo(prev => ({ ...prev, city: res.data.city }));
+                const [testRes, dishesRes] = await Promise.all([
+                    axios.get(`${API_URL}/tests/multi/${hash}`),
+                    axios.get(`${API_URL}/dishes`)
+                ]);
+                setTestData(testRes.data);
+                if (testRes.data.city) {
+                    setStudentInfo(prev => ({ ...prev, city: testRes.data.city }));
                 }
+
+                const mappedDishes = dishesRes.data.map(d => ({
+                    ...d,
+                    id: d._id
+                }));
+                setDishes(mappedDishes);
+                if (mappedDishes.length > 0) setSelectedDish(mappedDishes[0]);
             } catch (err) {
-                console.error('Error fetching multi-test:', err);
+                console.error('Error fetching multi-test data:', err);
                 if (err.response?.status === 410) {
                     navigate('/inactive');
                 }
@@ -56,7 +60,7 @@ const MultiDeskTest = () => {
                 setLoading(false);
             }
         };
-        fetchTest();
+        fetchData();
     }, [hash]);
 
     const templates = testData?.templateIds || [];
@@ -152,7 +156,7 @@ const MultiDeskTest = () => {
             setCurrentStep(prev => prev + 1);
             setItems([]);
             setStepResult(null);
-            setSelectedDish(dishList[0]);
+            if (dishes.length > 0) setSelectedDish(dishes[0]);
         } else {
             // All done — submit to server
             try {
@@ -323,14 +327,15 @@ const MultiDeskTest = () => {
                     <aside className="desk-panel inventory-panel">
                         <div className="panel-label">Посуд</div>
                         <div className="inventory-grid">
-                            {dishList.map(dish => (
+                            {dishes.map(dish => (
                                 <div key={dish.id}
-                                    className={`inv-item ${selectedDish.id === dish.id ? 'active' : ''}`}
+                                    className={`inv-item ${selectedDish?.id === dish.id ? 'active' : ''}`}
                                     onClick={() => !stepResult && setSelectedDish(dish)}>
                                     <span className="inv-icon">{dish.icon}</span>
                                     <span className="inv-name">{dish.name}</span>
                                 </div>
                             ))}
+                            {dishes.length === 0 && <div className="sidebar-empty">Немає посуду</div>}
                         </div>
                     </aside>
 

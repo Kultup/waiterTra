@@ -64,6 +64,7 @@ const uploadRouter = require('./routes/upload');
 const cityRouter = require('./routes/city');
 const statsRouter = require('./routes/stats');
 const analyticsRouter = require('./routes/analytics');
+const dishRouter = require('./routes/dish');
 
 app.use('/api/auth', authRouter);
 app.use('/api/desk-items', deskRouter);
@@ -79,6 +80,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/cities', cityRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/dishes', dishRouter);
 
 // Global error handler
 app.use((err, req, res, next) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import API_URL from '../api';
+import ConfirmModal from './ConfirmModal';
 import './CityManagement.css';
 
 const CityManagement = () => {
@@ -9,6 +10,7 @@ const CityManagement = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
 
     useEffect(() => {
         fetchCities();
@@ -45,8 +47,14 @@ const CityManagement = () => {
         }
     };
 
-    const handleDeleteCity = async (id) => {
-        // window.confirm is removed for testing
+    const handleDeleteClick = (id) => {
+        setConfirmModal({ isOpen: true, idToDelete: id });
+    };
+
+    const handleConfirmDelete = async () => {
+        const id = confirmModal.idToDelete;
+        if (!id) return;
+        setConfirmModal({ isOpen: false, idToDelete: null });
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/cities/${id}`, {
@@ -95,7 +103,7 @@ const CityManagement = () => {
                                 <span className="city-name">{city.name}</span>
                                 <button
                                     className="btn-delete-city"
-                                    onClick={() => handleDeleteCity(city._id)}
+                                    onClick={() => handleDeleteClick(city._id)}
                                     title="Видалити"
                                 >
                                     ×
@@ -105,6 +113,15 @@ const CityManagement = () => {
                     )}
                 </div>
             </section>
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title="Видалення міста"
+                message="Ви впевнені, що хочете видалити це місто? Це може вплинути на існуючих користувачів та шаблони."
+                confirmText="Видалити"
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setConfirmModal({ isOpen: false, idToDelete: null })}
+            />
         </div>
     );
 };
