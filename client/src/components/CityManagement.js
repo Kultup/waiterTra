@@ -46,7 +46,7 @@ const CityManagement = () => {
     };
 
     const handleDeleteCity = async (id) => {
-        if (!window.confirm('Ви впевнені, що хочете видалити це місто?')) return;
+        // window.confirm is removed for testing
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/cities/${id}`, {

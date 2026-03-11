@@ -25,6 +25,7 @@ const StudentTest = () => {
     // Registration State
     const [isRegistered, setIsRegistered] = useState(false);
     const [studentInfo, setStudentInfo] = useState({
+        firstName: '',
         lastName: '',
         city: '',
         position: ''
@@ -32,6 +33,20 @@ const StudentTest = () => {
 
     const [timeLeft, setTimeLeft] = useState(null);
     const handleCheckResultRef = useRef(null);
+
+    const [availableCities, setAvailableCities] = useState([]);
+
+    useEffect(() => {
+        const fetchCities = async () => {
+            try {
+                const response = await axios.get(`${API_URL}/cities`);
+                setAvailableCities(response.data);
+            } catch (error) {
+                console.error('Error fetching cities:', error);
+            }
+        };
+        fetchCities();
+    }, []);
 
     useEffect(() => {
         const fetchTest = async () => {
@@ -51,7 +66,7 @@ const StudentTest = () => {
             }
         };
         fetchTest();
-    }, [hash]);
+    }, [hash, navigate]);
 
 
     // Timer logic
@@ -179,22 +194,26 @@ const StudentTest = () => {
                         </div>
                         <div className="form-group">
                             <label>Місто</label>
-                            <input
-                                type="text"
-                                value={studentInfo.city || '—'}
-                                disabled
-                                style={{
-                                    width: '100%',
-                                    padding: '12px 15px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #333',
-                                    background: '#1a1a1a',
-                                    color: '#fff',
-                                    fontSize: '1rem',
-                                    opacity: 0.7,
-                                    cursor: 'not-allowed'
-                                }}
-                            />
+                            {testData.city ? (
+                                <input
+                                    type="text"
+                                    value={studentInfo.city}
+                                    disabled
+                                    className="form-control-disabled"
+                                />
+                            ) : (
+                                <select
+                                    value={studentInfo.city}
+                                    onChange={(e) => setStudentInfo({ ...studentInfo, city: e.target.value })}
+                                    required
+                                    className="form-control"
+                                >
+                                    <option value="">Оберіть місто...</option>
+                                    {availableCities.map(city => (
+                                        <option key={city._id} value={city.name}>{city.name}</option>
+                                    ))}
+                                </select>
+                            )}
                         </div>
                         <div className="form-group">
                             <label>Посада</label>

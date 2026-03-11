@@ -12,8 +12,10 @@ router.get('/', auth, async (req, res) => {
       // viewer бачить результати свого міста
       query = req.user.city ? { studentCity: req.user.city } : { _id: null };
     } else {
-      // admin/trainer — тільки свої тести
-      query = { ownerId: req.user._id };
+      // admin/trainer — бачать свої результати АБО результати свого міста
+      const orConditions = [{ ownerId: req.user._id }];
+      if (req.user.city) orConditions.push({ studentCity: req.user.city });
+      query = { $or: orConditions };
     }
     const results = await TestResult.find(query).sort({ completedAt: -1 });
     res.json(results);

@@ -20,7 +20,6 @@ const gameScenarioSchema = new mongoose.Schema({
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     startNodeId: { type: String, required: true },
     nodes: [nodeSchema],
-    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     createdAt: { type: Date, default: Date.now }
 });
 

@@ -150,12 +150,12 @@ const VirtualDesk = () => {
                 const payload = {
                     templateName: templateName.trim(),
                     name: templateName.trim(),
-                    items: items.map(({ name, icon, x, y, type, id, width, height }) => ({ 
-                        id: id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, 
-                        name, 
-                        icon, 
-                        x, 
-                        y, 
+                    items: items.map(({ name, icon, x, y, type, id, width, height }) => ({
+                        id: id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                        name,
+                        icon,
+                        x,
+                        y,
                         type,
                         width: width || 100,
                         height: height || 100
@@ -394,7 +394,7 @@ const VirtualDesk = () => {
                                             <div className="tpl-main">
                                                 <span className="tpl-icon">📋</span>
                                                 <div className="tpl-info">
-                                                    <span className="tpl-name">{t.name}</span>
+                                                    <span className="tpl-name">{t.templateName || t.name}</span>
                                                     <span className="tpl-meta">
                                                         {t.items?.length || 0} предм.
                                                         {t.timeLimit > 0 && ` · ⏱ ${t.timeLimit} хв`}

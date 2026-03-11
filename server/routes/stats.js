@@ -11,14 +11,33 @@ const router = express.Router();
 router.get('/overview', auth, async (req, res) => {
   try {
     const { city, days = 30 } = req.query;
-    
-    // Базова фільтрація по ownerId для не-superadmin
-    const ownerFilter = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
 
-    // Додаткова фільтрація по місту (лише якщо явно вказано через ?city=)
-    const testFilter = { ...ownerFilter, ...(city ? { studentCity: city } : {}) };
-    const quizFilter = { ...ownerFilter, ...(city ? { studentCity: city } : {}) };
-    const gameFilter = { ...ownerFilter, ...(city ? { city } : {}) };
+    // Базова фільтрація: superadmin бачить все, решта — своє + своє місто
+    let baseFilter = {};
+    if (req.user.role !== 'superadmin') {
+      baseFilter = {
+        $or: [
+          { ownerId: req.user._id },
+          ...(req.user.city ? [{ city: req.user.city }, { studentCity: req.user.city }] : [])
+        ]
+      };
+    }
+
+    // Додаткова фільтрація по місту з запиту (якщо superadmin хоче конкретне місто, або admin хоче фільтр)
+    const getFilter = (cityField) => {
+      const filter = { ...baseFilter };
+      if (city) {
+        // Якщо вказано конкретне місто в query, воно має пріоритет (або звужує пошук)
+        // Але для адміна ми вже обмежили базу його містом (чере baseFilter)
+        // Тож якщо адмін спробує глянути чуже місто, baseFilter його обмежить.
+        return { $and: [filter, { [cityField]: city }] };
+      }
+      return filter;
+    };
+
+    const testFilter = getFilter('studentCity');
+    const quizFilter = getFilter('studentCity');
+    const gameFilter = getFilter('city');
 
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(days));
@@ -28,13 +47,13 @@ router.get('/overview', auth, async (req, res) => {
       GameResult.find(gameFilter).sort({ completedAt: -1 }),
       QuizResult.find(quizFilter).sort({ completedAt: -1 })
     ]);
-    
+
     const allResults = [
       ...testResults.map(r => ({ ...r.toObject(), type: 'test', passed: r.passed, percentage: r.percentage })),
       ...gameResults.map(r => ({ ...r.toObject(), type: 'game', passed: r.isWin })),
       ...quizResults.map(r => ({ ...r.toObject(), type: 'quiz', passed: r.percentage >= 80, percentage: r.percentage }))
     ];
-    
+
     // Статистика по днях (останні 14 днів)
     const resultsByDay = {};
     allResults.forEach(result => {
@@ -49,9 +68,9 @@ router.get('/overview', auth, async (req, res) => {
         resultsByDay[date].failed++;
       }
     });
-    
+
     const chartData = Object.values(resultsByDay).slice(-14);
-    
+
     // Топ-5 найнижчих результатів
     const sortedByScore = [...allResults].sort((a, b) => (a.percentage || 0) - (b.percentage || 0));
     const weakSpots = sortedByScore.slice(0, 5).map(r => ({
@@ -60,25 +79,25 @@ router.get('/overview', auth, async (req, res) => {
       percentage: r.percentage || (r.passed ? 100 : 0),
       date: new Date(r.completedAt).toLocaleDateString('uk-UA')
     }));
-    
+
     // Середній % по типах тестів
     const avgByType = {
-      test: testResults.length > 0 
+      test: testResults.length > 0
         ? Math.round(testResults.reduce((sum, r) => sum + r.percentage, 0) / testResults.length)
         : 0,
-      game: gameResults.length > 0 
+      game: gameResults.length > 0
         ? Math.round((gameResults.filter(r => r.isWin).length / gameResults.length) * 100)
         : 0,
-      quiz: quizResults.length > 0 
+      quiz: quizResults.length > 0
         ? Math.round(quizResults.reduce((sum, r) => sum + r.percentage, 0) / quizResults.length)
         : 0
     };
-    
+
     // Загальна статистика
     const totalResults = allResults.length;
     const passedResults = allResults.filter(r => r.passed).length;
     const overallPercentage = totalResults > 0 ? Math.round((passedResults / totalResults) * 100) : 0;
-    
+
     res.json({
       totalResults,
       passedResults,
@@ -103,9 +122,17 @@ router.get('/overview', auth, async (req, res) => {
 // Отримати список міст для фільтрів
 router.get('/cities', auth, async (req, res) => {
   try {
-    const ownerFilter = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+    let ownerFilter = {};
+    if (req.user.role !== 'superadmin') {
+      ownerFilter = {
+        $or: [
+          { ownerId: req.user._id },
+          ...(req.user.city ? [{ city: req.user.city }, { studentCity: req.user.city }] : [])
+        ]
+      };
+    }
 
-    // Отримуємо унікальні міста лише зі своїх результатів
+    // Отримуємо унікальні міста лише з тих результатів, до яких є доступ
     const [testCities, gameCities, quizCities] = await Promise.all([
       TestResult.distinct('studentCity', ownerFilter),
       GameResult.distinct('city', ownerFilter),

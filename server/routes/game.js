@@ -90,28 +90,28 @@ linksRouter.get('/:hash', async (req, res) => {
   try {
     const link = await GameLink.findOne({ hash: req.params.hash })
       .populate('scenarioId');
-    
-    console.log('Game link lookup:', { 
-      hash: req.params.hash, 
-      found: !!link, 
+
+    console.log('Game link lookup:', {
+      hash: req.params.hash,
+      found: !!link,
       scenarioId: link?.scenarioId?._id,
       isUsed: link?.isUsed,
       isActive: link?.isActive
     });
-    
+
     if (!link) {
       console.error('Link not found for hash:', req.params.hash);
       return res.status(404).json({ error: 'Посилання не знайдено' });
     }
-    
+
     if (link.isUsed || !link.isActive) {
       console.error('Link is used/inactive for hash:', req.params.hash);
-      return res.status(410).json({ 
+      return res.status(410).json({
         error: 'Це посилання вже використано',
         isUsed: true
       });
     }
-    
+
     if (!link.scenarioId) {
       console.error('Scenario not found for link hash:', req.params.hash);
       return res.status(404).json({ error: 'Сценарій не знайдено' });
@@ -129,7 +129,7 @@ linksRouter.get('/:hash', async (req, res) => {
       ownerId: link.ownerId,
       city: response.city,
       ip: req.ip || req.headers['x-forwarded-for'] || ''
-    }).catch(() => {});
+    }).catch(() => { });
 
     console.log('Returning game data:', {
       scenarioTitle: link.scenarioId.title,
@@ -176,15 +176,15 @@ resultsRouter.post('/', async (req, res) => {
   console.log('=== GAME RESULTS ENDPOINT CALLED ===');
   const { scenarioTitle, playerName, playerLastName, playerCity, playerPosition, isWin, hash } = req.body;
 
-  console.log('Received game result:', { 
-    scenarioTitle, 
-    playerName, 
-    playerLastName, 
-    playerCity, 
-    playerPosition, 
-    isWin, 
+  console.log('Received game result:', {
+    scenarioTitle,
+    playerName,
+    playerLastName,
+    playerCity,
+    playerPosition,
+    isWin,
     hash,
-    hasHash: !!hash 
+    hasHash: !!hash
   });
 
   if (!scenarioTitle || !String(scenarioTitle).trim()) {
@@ -255,7 +255,10 @@ resultsRouter.get('/', auth, async (req, res) => {
     } else if (req.user.role === 'viewer') {
       query = req.user.city ? { city: req.user.city } : { _id: null };
     } else {
-      query = { ownerId: req.user._id };
+      // admin/trainer — бачать свої результати АБО результати свого міста
+      const orConditions = [{ ownerId: req.user._id }];
+      if (req.user.city) orConditions.push({ city: req.user.city });
+      query = { $or: orConditions };
     }
     const results = await GameResult.find(query).sort({ completedAt: -1 });
     res.json(results);
