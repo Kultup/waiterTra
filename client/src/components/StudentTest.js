@@ -4,21 +4,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import './VirtualDesk.css';
 import API_URL from '../api';
 
-const dishList = [
-    { id: 'plate', name: 'Тарілка', icon: '🍽️' },
-    { id: 'glass', name: 'Склянка', icon: '🍷' },
-    { id: 'fork', name: 'Виделка', icon: '🍴' },
-    { id: 'knife', name: 'Ніж', icon: '🔪' },
-    { id: 'spoon', name: 'Ложка', icon: '🥄' },
-    { id: 'coffee', name: 'Кава', icon: '☕' },
-];
+// Removed hardcoded dishList. Fetching dynamically now.
 
 const StudentTest = () => {
     const { hash } = useParams();
     const navigate = useNavigate();
     const [testData, setTestData] = useState(null);
     const [items, setItems] = useState([]);
-    const [selectedDish, setSelectedDish] = useState(dishList[0]);
+    const [dishes, setDishes] = useState([]);
+    const [selectedDish, setSelectedDish] = useState(null);
     const [testResult, setTestResult] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -37,15 +31,25 @@ const StudentTest = () => {
     const [availableCities, setAvailableCities] = useState([]);
 
     useEffect(() => {
-        const fetchCities = async () => {
+        const fetchInitialData = async () => {
             try {
-                const response = await axios.get(`${API_URL}/cities`);
-                setAvailableCities(response.data);
+                const [citiesRes, dishesRes] = await Promise.all([
+                    axios.get(`${API_URL}/cities`),
+                    axios.get(`${API_URL}/dishes`)
+                ]);
+                setAvailableCities(citiesRes.data);
+                
+                const mappedDishes = dishesRes.data.map(d => ({
+                    ...d,
+                    id: d._id // Map _id to id for compatibility
+                }));
+                setDishes(mappedDishes);
+                if (mappedDishes.length > 0) setSelectedDish(mappedDishes[0]);
             } catch (error) {
-                console.error('Error fetching cities:', error);
+                console.error('Error fetching initial data:', error);
             }
         };
-        fetchCities();
+        fetchInitialData();
     }, []);
 
     useEffect(() => {
@@ -260,16 +264,17 @@ const StudentTest = () => {
                 <aside className="desk-panel inventory-panel">
                     <div className="panel-label">Посуд</div>
                     <div className="inventory-grid">
-                        {dishList.map(dish => (
+                        {dishes.map(dish => (
                             <div
                                 key={dish.id}
-                                className={`inv-item ${selectedDish.id === dish.id ? 'active' : ''}`}
+                                className={`inv-item ${selectedDish?.id === dish.id ? 'active' : ''}`}
                                 onClick={() => !testResult && setSelectedDish(dish)}
                             >
                                 <span className="inv-icon">{dish.icon}</span>
                                 <span className="inv-name">{dish.name}</span>
                             </div>
                         ))}
+                        {dishes.length === 0 && <div className="sidebar-empty">Немає посуду</div>}
                     </div>
                 </aside>
 

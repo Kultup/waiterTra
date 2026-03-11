@@ -19,6 +19,7 @@ import CityManagement from './components/CityManagement.js';
 import Login from './components/Login.js';
 import GamePlay from './components/GamePlay.js';
 import Analytics from './components/Analytics.js';
+import DishManagement from './components/DishManagement.js';
 
 function AdminPanel({ onLogout, user }) {
   const navigate = useNavigate();
@@ -56,6 +57,7 @@ function AdminPanel({ onLogout, user }) {
               <Route path="analytics" element={user?.role === 'localadmin' ? <Analytics user={user} /> : <Dashboard user={user} />} />
               <Route path="users" element={user?.role === 'superadmin' ? <UserManager /> : <Dashboard user={user} />} />
               <Route path="cities" element={user?.role === 'superadmin' ? <CityManagement /> : <Dashboard user={user} />} />
+              <Route path="dishes" element={['superadmin', 'admin'].includes(user?.role) ? <DishManagement /> : <Dashboard user={user} />} />
               <Route path="virtual-desk" element={['superadmin', 'admin'].includes(user?.role) ? <VirtualDesk /> : <Dashboard user={user} />} />
               <Route path="test-results" element={<TestResults user={user} />} />
               <Route path="visual-builder" element={['superadmin', 'admin', 'trainer'].includes(user?.role) ? <VisualGameBuilder /> : <Dashboard user={user} />} />

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import API_URL from '../api';
 import { useToast } from '../contexts/ToastContext';
+import ConfirmModal from './ConfirmModal';
 import './QuizBuilder.css';
 
 const QuizBuilder = () => {
@@ -14,6 +15,7 @@ const QuizBuilder = () => {
     const [user, setUser] = useState(null);
     const [cities, setCities] = useState([]);
     const [filterCity, setFilterCity] = useState('');
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
 
     useEffect(() => {
         fetchUser();
@@ -178,8 +180,10 @@ const QuizBuilder = () => {
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('Ви впевнені?')) return;
+    const handleConfirmDelete = async () => {
+        const id = confirmModal.idToDelete;
+        if (!id) return;
+        setConfirmModal({ isOpen: false, idToDelete: null });
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/quiz/${id}`, {
@@ -187,7 +191,7 @@ const QuizBuilder = () => {
             });
             fetchQuizzes();
         } catch (err) {
-            console.error('handleDelete:', err);
+            console.error('handleDelete error:', err);
         }
     };
 
@@ -250,7 +254,7 @@ const QuizBuilder = () => {
                             className="qb-textarea"
                             value={editing.description}
                             onChange={e => setEditing({ ...editing, description: e.target.value })}
-                            placeholder="Короткий опис для студентів..."
+                            placeholder="Короткий опис..."
                         />
                     </div>
 
@@ -441,12 +445,21 @@ const QuizBuilder = () => {
                                     {copyStatus === quiz._id ? '✓ Скопійовано' : '🔗 Посилання'}
                                 </button>
                                 <button className="qb-btn-icon" onClick={() => setEditing(quiz)} title="Редагувати">✏️</button>
-                                <button className="qb-btn-icon delete" onClick={() => handleDelete(quiz._id)} title="Видалити">🗑️</button>
+                                <button className="qb-btn-icon delete" onClick={() => setConfirmModal({ isOpen: true, idToDelete: quiz._id })} title="Видалити">🗑️</button>
                             </div>
                         </div>
                     ))
                 )}
             </div>
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title="Видалення квізу"
+                message="Ви впевнені, що хочете видалити цей квіз? Цю дію неможливо скасувати."
+                confirmText="Видалити"
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setConfirmModal({ isOpen: false, idToDelete: null })}
+            />
         </div>
     );
 };

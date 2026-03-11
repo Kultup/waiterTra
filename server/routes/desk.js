@@ -1,5 +1,6 @@
 const express = require('express');
 const DeskItem = require('../models/DeskItem');
+const Dish = require('../models/Dish');
 const { auth } = require('../middleware/authMiddleware');
 const router = express.Router();
 
@@ -7,7 +8,13 @@ router.get('/', auth, async (req, res) => {
   try {
     const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
     const items = await DeskItem.find(query);
-    res.json(items);
+    
+    // Server-side filtering: only return items whose 'type' exists in the Dish collection
+    const dishes = await Dish.find({}, '_id');
+    const dishIds = dishes.map(d => String(d._id));
+    
+    const validItems = items.filter(item => dishIds.includes(String(item.type)));
+    res.json(validItems);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -38,6 +45,17 @@ router.delete('/:id', auth, async (req, res) => {
     const item = await DeskItem.findOneAndDelete(query);
     if (!item) return res.status(404).json({ error: 'Item not found or unauthorized' });
     res.json({ message: 'Item deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk DELETE all items for the current user
+router.delete('/', auth, async (req, res) => {
+  try {
+    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+    await DeskItem.deleteMany(query);
+    res.json({ message: 'All items deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

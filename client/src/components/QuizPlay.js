@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import API_URL from '../api';
+import ConfirmModal from './ConfirmModal';
 import './QuizBuilder.css'; // Reusing some base styles
 
 const VideoPlayer = ({ url }) => {
@@ -59,6 +60,7 @@ const QuizPlay = () => {
     const [answers, setAnswers] = useState({});
     const [result, setResult] = useState(null);
     const [submitting, setSubmitting] = useState(false);
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false });
 
     // Timer state
     const [timeLeft, setTimeLeft] = useState(null);
@@ -115,11 +117,7 @@ const QuizPlay = () => {
         }
     };
 
-    const handleSubmit = async (isAuto = false) => {
-        if (!isAuto && Object.keys(answers).length < quiz.questions.length) {
-            if (!window.confirm('Ви відповіли не на всі питання. Продовжити?')) return;
-        }
-
+    const processSubmit = async () => {
         if (submitting) return;
         setSubmitting(true);
         if (timerRef.current) clearInterval(timerRef.current);
@@ -134,11 +132,24 @@ const QuizPlay = () => {
             });
             setResult(res.data);
         } catch (err) {
-            console.error('handleSubmit:', err);
+            console.error('submit error:', err);
             alert('Помилка при відправці');
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleSubmit = async (isAuto = false) => {
+        if (!isAuto && Object.keys(answers).length < quiz.questions.length) {
+            setConfirmModal({ isOpen: true });
+            return;
+        }
+        await processSubmit();
+    };
+
+    const handleConfirmSubmit = () => {
+        setConfirmModal({ isOpen: false });
+        processSubmit();
     };
 
     const formatTime = (seconds) => {
@@ -305,6 +316,15 @@ const QuizPlay = () => {
                     </button>
                 </main>
             </div>
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title="Неповні відповіді"
+                message="Ви відповіли не на всі питання. Продовжити завершення тесту?"
+                confirmText="Так, завершити"
+                onConfirm={handleConfirmSubmit}
+                onCancel={() => setConfirmModal({ isOpen: false })}
+            />
         </div>
     );
 };

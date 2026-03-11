@@ -17,10 +17,11 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user })
     { id: 'complex-builder', label: 'Комплексний тест', icon: '🧩', roles: ['superadmin', 'admin'] },
   ];
 
-  // Управління (тільки superadmin)
+  // Управління (тільки superadmin та admin)
   const adminMenu = [
     { id: 'users', label: 'Користувачі', icon: '👥', roles: ['superadmin'] },
     { id: 'cities', label: 'Міста', icon: '🏙️', roles: ['superadmin'] },
+    { id: 'dishes', label: 'Посуд', icon: '🍽️', roles: ['superadmin', 'admin'] },
     { id: 'settings', label: 'Налаштування', icon: '⚙️', roles: ['superadmin'] },
   ];
 

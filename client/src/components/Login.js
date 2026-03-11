@@ -39,6 +39,7 @@ const Login = ({ onLogin }) => {
           <p>Платформа навчання персоналу</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">
+          {error && <div className="error-message" style={{ color: '#f87171', background: 'rgba(248,113,113,0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', border: '1px solid rgba(248,113,113,0.2)', textAlign: 'center', fontSize: '0.9rem' }}>{error}</div>}
           <div className="form-group">
             <label>Логін</label>
             <input

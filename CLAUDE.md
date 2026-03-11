@@ -34,6 +34,11 @@ cd server && npm test
 cd server && npx jest tests/auth.test.js --detectOpenHandles --forceExit
 ```
 
+**Seed game scenarios (initial data):**
+```bash
+npm run seed:game
+```
+
 **Run client tests:**
 ```bash
 cd client && npm test
@@ -98,6 +103,7 @@ server/
 - `GameScenario` / `GameLink` / `GameResult` — branching scenario game
 - `Quiz` / `QuizLink` / `QuizResult` — multiple-choice quiz
 - `ComplexTest` / `ComplexTestLink` / `ComplexTestResult` — combined multi-module test
+- `Dish` — dish/item catalog used in desk tests (admin-managed, globally shared)
 - `PageView` — analytics tracking (every student page load)
 
 **Key API routes:**
@@ -118,6 +124,7 @@ server/
 | `GET/POST/PUT/DELETE /api/complex-tests` | Complex test management |
 | `GET /api/cities` | City list (public) |
 | `POST/DELETE /api/cities` | City management (superadmin) |
+| `GET/POST/PUT/DELETE /api/dishes` | Dish catalog (GET: all authenticated; mutate: admin+) |
 | `GET /api/stats/overview` | Dashboard statistics |
 | `GET /api/analytics/overview` | Analytics overview (localadmin) |
 | `GET /api/analytics/traffic` | Daily traffic chart data |

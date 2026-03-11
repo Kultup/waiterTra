@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import API_URL from '../api';
+import ConfirmModal from './ConfirmModal';
 import './GameBuilder.css';
 
 // ── ID generators ────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ const GameBuilder = () => {
     const [user, setUser] = useState(null);
     const [cities, setCities] = useState([]);
     const [filterCity, setFilterCity] = useState('');
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
 
     useEffect(() => {
         fetchUser();
@@ -102,8 +104,10 @@ const GameBuilder = () => {
         } catch (err) { console.error('openEdit:', err); }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('Видалити сценарій?')) return;
+    const handleConfirmDelete = async () => {
+        const id = confirmModal.idToDelete;
+        if (!id) return;
+        setConfirmModal({ isOpen: false, idToDelete: null });
         try {
             await axios.delete(`${API_URL}/game-scenarios/${id}`);
             setScenarios(prev => prev.filter(s => s._id !== id));
@@ -631,13 +635,22 @@ const GameBuilder = () => {
                                 <div className="scenario-actions">
                                     <button className="scenario-btn" title="Копіювати посилання" onClick={() => handleCopyLink(scenario._id)}>📋</button>
                                     <button className="scenario-btn" title="Редагувати" onClick={() => openEdit(scenario._id)}>✏️</button>
-                                    <button className="scenario-btn scenario-btn-danger" title="Видалити" onClick={() => handleDelete(scenario._id)}>🗑️</button>
+                                    <button className="scenario-btn scenario-btn-danger" title="Видалити" onClick={() => setConfirmModal({ isOpen: true, idToDelete: scenario._id })}>🗑️</button>
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                title="Видалення сценарію"
+                message="Ви впевнені, що хочете видалити цей ігровий сценарій? Цю дію неможливо скасувати."
+                confirmText="Видалити"
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setConfirmModal({ isOpen: false, idToDelete: null })}
+            />
         </div>
     );
 };
