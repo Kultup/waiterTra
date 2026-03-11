@@ -128,7 +128,7 @@ router.get('/hash/:hash', async (req, res) => {
             ownerId: link.ownerId,
             city: quiz.city,
             ip: req.ip || req.headers['x-forwarded-for'] || ''
-        }).catch(() => {});
+        }).catch(() => { });
 
         res.json(quiz);
     } catch (err) {
@@ -140,7 +140,7 @@ router.get('/hash/:hash', async (req, res) => {
 router.post('/hash/:hash/submit', async (req, res) => {
     try {
         console.log('Submitting quiz:', req.params.hash, req.body);
-        
+
         const link = await QuizLink.findOne({ hash: req.params.hash }).populate('quizId');
         if (!link) {
             console.error('Quiz link not found:', req.params.hash);
@@ -153,11 +153,11 @@ router.post('/hash/:hash/submit', async (req, res) => {
 
         const quiz = link.quizId;
         const { studentName, studentLastName, studentCity, studentPosition, answers } = req.body;
-        
+
         if (!studentName || !studentLastName) {
             return res.status(400).json({ error: 'Ім\'я та прізвище обов\'язкові' });
         }
-        
+
         let score = 0;
         const answersArray = answers || [];
 
@@ -174,6 +174,10 @@ router.post('/hash/:hash/submit', async (req, res) => {
             };
         });
 
+        const total = quiz.questions.length;
+        const percentage = Math.round((score / total) * 100);
+        const passed = percentage >= (quiz.passingScore || 70);
+
         const result = new QuizResult({
             quizId: quiz._id,
             ownerId: quiz.ownerId,
@@ -182,17 +186,18 @@ router.post('/hash/:hash/submit', async (req, res) => {
             studentCity: String(studentCity || '').trim(),
             studentPosition: String(studentPosition || '').trim(),
             score,
-            total: quiz.questions.length,
-            percentage: Math.round((score / quiz.questions.length) * 100),
+            total,
+            percentage,
+            passed,
             answers: detailedAnswers
         });
 
         await result.save();
-        
+
         // Mark link as used after successful save
         link.isUsed = true;
         await link.save();
-        
+
         console.log('Quiz result saved:', result._id);
         res.json(result);
     } catch (err) {
@@ -210,7 +215,10 @@ router.get('/results', auth, async (req, res) => {
         } else if (req.user.role === 'viewer') {
             query = req.user.city ? { studentCity: req.user.city } : { _id: null };
         } else {
-            query = { ownerId: req.user._id };
+            // admin/trainer — бачать свої результати АБО результати свого міста
+            const orConditions = [{ ownerId: req.user._id }];
+            if (req.user.city) orConditions.push({ studentCity: req.user.city });
+            query = { $or: orConditions };
         }
         const results = await QuizResult.find(query).populate('quizId', 'title').sort({ completedAt: -1 });
         res.json(results);

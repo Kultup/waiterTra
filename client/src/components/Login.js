@@ -23,6 +23,7 @@ const Login = ({ onLogin }) => {
       onLogin(token, user);
       navigate('/');
     } catch (err) {
+      console.error('Login error details:', err.response?.data);
       setError(err.response?.data?.error || 'Помилка підключення до сервера');
     } finally {
       setLoading(false);

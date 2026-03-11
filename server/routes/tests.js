@@ -30,6 +30,22 @@ router.post('/multi', auth, async (req, res) => {
   }
 });
 
+// Admin: get all multi-desk tests
+router.get('/multi', auth, async (req, res) => {
+  try {
+    let query = {};
+    if (req.user.role !== 'superadmin') {
+      const orConditions = [{ ownerId: req.user._id }];
+      if (req.user.city) orConditions.push({ targetCity: req.user.city });
+      query = { $or: orConditions };
+    }
+    const tests = await MultiDeskTest.find(query).populate('templateIds').sort({ createdAt: -1 });
+    res.json(tests);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Public: get multi-desk test by hash
 router.get('/multi/:hash', async (req, res) => {
   try {
@@ -49,7 +65,7 @@ router.get('/multi/:hash', async (req, res) => {
       ownerId: test.ownerId?._id || test.ownerId,
       city: response.city,
       ip: req.ip || req.headers['x-forwarded-for'] || ''
-    }).catch(() => {});
+    }).catch(() => { });
 
     res.json(response);
   } catch (error) {
@@ -103,7 +119,7 @@ router.post('/multi/:hash/submit', async (req, res) => {
       const result = new TestResult({
         testId: test._id,
         ownerId: test.ownerId,
-        templateName: template.name,
+        templateName: template.templateName || template.name,
         studentName: String(studentName).trim(),
         studentLastName: String(studentLastName).trim(),
         studentCity: String(studentCity).trim(),
@@ -142,7 +158,7 @@ router.get('/:hash', async (req, res) => {
       ownerId: test.ownerId?._id || test.ownerId,
       city: response.city,
       ip: req.ip || req.headers['x-forwarded-for'] || ''
-    }).catch(() => {});
+    }).catch(() => { });
 
     res.json(response);
   } catch (error) {
@@ -206,7 +222,7 @@ router.post('/:hash/submit', async (req, res) => {
     const result = new TestResult({
       testId: test._id,
       ownerId: test.ownerId,
-      templateName: test.templateId.name,
+      templateName: test.templateId.templateName || test.templateId.name,
       studentName: String(studentName).trim(),
       studentLastName: String(studentLastName).trim(),
       studentCity: String(studentCity).trim(),
@@ -252,8 +268,13 @@ router.post('/', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
-    const tests = await DeskTest.find(query).populate('templateId');
+    let query = {};
+    if (req.user.role !== 'superadmin') {
+      const orConditions = [{ ownerId: req.user._id }];
+      if (req.user.city) orConditions.push({ targetCity: req.user.city });
+      query = { $or: orConditions };
+    }
+    const tests = await DeskTest.find(query).populate('templateId').sort({ createdAt: -1 });
     res.json(tests);
   } catch (error) {
     res.status(500).json({ error: error.message });

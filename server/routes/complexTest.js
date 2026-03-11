@@ -21,9 +21,13 @@ router.get('/', auth, async (req, res) => {
             query = {
                 $or: [
                     { ownerId: req.user._id },
-                    { targetCity: req.user.city, targetCity: { $ne: '' } }
+                    { targetCity: req.user.city }
                 ]
             };
+            // Ensure we don't match empty targetCity if req.user.city is empty (though admins should have a city)
+            if (!req.user.city) {
+                query.$or = [{ ownerId: req.user._id }];
+            }
         }
         const tests = await ComplexTest.find(query).sort({ createdAt: -1 });
         res.json(tests);
@@ -153,7 +157,7 @@ router.get('/hash/:hash', async (req, res) => {
             ownerId: link.ownerId,
             city,
             ip: req.ip || req.headers['x-forwarded-for'] || ''
-        }).catch(() => {});
+        }).catch(() => { });
 
         res.json({
             _id: test._id,
@@ -216,7 +220,10 @@ router.get('/results', auth, async (req, res) => {
         } else if (req.user.role === 'viewer') {
             query = req.user.city ? { studentCity: req.user.city } : { _id: null };
         } else {
-            query = { ownerId: req.user._id };
+            // admin/trainer — бачать свої результати АБО результати свого міста
+            const orConditions = [{ ownerId: req.user._id }];
+            if (req.user.city) orConditions.push({ studentCity: req.user.city });
+            query = { $or: orConditions };
         }
         const results = await ComplexTestResult.find(query)
             .populate('complexTestId', 'title')
