@@ -211,6 +211,59 @@ const QuizBuilder = () => {
         XLSX.writeFile(wb, 'quiz-template.xlsx');
     };
 
+    const handleImport = (e) => {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const wb = XLSX.read(ev.target.result, { type: 'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+                // skip header row
+                const dataRows = rows.slice(1).filter(r => r[0] && String(r[0]).trim() !== '');
+
+                if (dataRows.length === 0) {
+                    toast.error('Файл порожній або невірний формат');
+                    return;
+                }
+
+                const questions = dataRows.map(r => {
+                    const options = [r[1], r[2], r[3], r[4]]
+                        .map(o => String(o).trim())
+                        .filter(o => o !== '');
+                    const correctIndex = Math.max(0, parseInt(r[5]) - 1) || 0;
+                    return {
+                        text: String(r[0]).trim(),
+                        options: options.length >= 2 ? options : [...options, '', ''].slice(0, 2),
+                        correctIndex: Math.min(correctIndex, options.length - 1),
+                        explanation: String(r[6] || '').trim(),
+                        image: '',
+                        video: ''
+                    };
+                });
+
+                setEditing({
+                    title: file.name.replace(/\.[^.]+$/, ''),
+                    description: '',
+                    timeLimit: 0,
+                    passingScore: 80,
+                    targetCity: '',
+                    questions
+                });
+                setCollapsedQuestions(new Set(questions.map((_, i) => i)));
+                toast.success(`Імпортовано ${questions.length} питань`);
+            } catch (err) {
+                console.error('handleImport:', err);
+                toast.error('Помилка читання файлу');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
     const handleCopyLink = async (quizId) => {
         try {
             const token = localStorage.getItem('token');
@@ -431,7 +484,11 @@ const QuizBuilder = () => {
                             </select>
                         </div>
                     )}
-                    <button className="qb-btn qb-btn-outline" onClick={handleDownloadTemplate} title="Завантажити JSON-шаблон для майбутнього імпорту">⬇ Шаблон</button>
+                    <button className="qb-btn qb-btn-outline" onClick={handleDownloadTemplate} title="Завантажити Excel-шаблон">⬇ Шаблон</button>
+                    <label className="qb-btn qb-btn-outline" style={{ cursor: 'pointer' }} title="Імпортувати з Excel">
+                        ⬆ Імпорт
+                        <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
+                    </label>
                     <button className="qb-btn qb-btn-primary" onClick={handleNewQuiz}>+ Створити квіз</button>
                 </div>
             </header>
