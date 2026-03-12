@@ -40,11 +40,16 @@ router.post('/', auth, async (req, res) => {
 
         console.log('Creating quiz:', { title, questionsCount: questions.length, hash });
 
+        const sanitizedQuestions = questions.map(q => ({
+            ...q,
+            options: (q.options || []).filter(o => o && o.trim() !== '')
+        }));
+
         const quiz = new Quiz({
             title: title.trim(),
             description: description || '',
             city: targetCity || city || '',
-            questions,
+            questions: sanitizedQuestions,
             timeLimit: timeLimit || 300,
             passingScore: passingScore || 70,
             hash,
@@ -89,6 +94,12 @@ router.put('/:id', auth, async (req, res) => {
         if (updateData.targetCity !== undefined) {
             updateData.city = updateData.targetCity;
             delete updateData.targetCity;
+        }
+        if (Array.isArray(updateData.questions)) {
+            updateData.questions = updateData.questions.map(q => ({
+                ...q,
+                options: (q.options || []).filter(o => o && o.trim() !== '')
+            }));
         }
         const quiz = await Quiz.findOneAndUpdate(query, updateData, { new: true });
         if (!quiz) return res.status(404).json({ error: 'Quiz not found or unauthorized' });

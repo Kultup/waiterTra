@@ -7,7 +7,7 @@ const quizSchema = new mongoose.Schema({
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     questions: [{
         text: { type: String, required: true },
-        options: [{ type: String, required: true }],
+        options: [{ type: String }],
         correctIndex: { type: Number, required: true },
         image: { type: String },
         video: { type: String },
