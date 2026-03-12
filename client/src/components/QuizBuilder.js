@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import axios from 'axios';
 import API_URL from '../api';
 import { useToast } from '../contexts/ToastContext';
@@ -193,6 +194,21 @@ const QuizBuilder = () => {
         } catch (err) {
             console.error('handleDelete error:', err);
         }
+    };
+
+    const handleDownloadTemplate = () => {
+        const rows = [
+            ['питання', 'варіант_1', 'варіант_2', 'варіант_3', 'варіант_4', 'правильний_варіант', 'пояснення'],
+            ['Текст першого питання?', 'Варіант А', 'Варіант Б', 'Варіант В', 'Варіант Г', '1', 'Пояснення чому правильна відповідь А'],
+            ['Текст другого питання?', 'Варіант А', 'Варіант Б', 'Варіант В', '', '2', ''],
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = [
+            { wch: 40 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 35 }
+        ];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Питання');
+        XLSX.writeFile(wb, 'quiz-template.xlsx');
     };
 
     const handleCopyLink = async (quizId) => {
@@ -415,6 +431,7 @@ const QuizBuilder = () => {
                             </select>
                         </div>
                     )}
+                    <button className="qb-btn qb-btn-outline" onClick={handleDownloadTemplate} title="Завантажити JSON-шаблон для майбутнього імпорту">⬇ Шаблон</button>
                     <button className="qb-btn qb-btn-primary" onClick={handleNewQuiz}>+ Створити квіз</button>
                 </div>
             </header>
