@@ -10,7 +10,13 @@ const logger = require('./utils/logger');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://serviq.krainamriy.fun']
+    : true,
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -81,6 +87,15 @@ app.use('/api/cities', cityRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/dishes', dishRouter);
+
+// Serve React build in production
+if (process.env.NODE_ENV === 'production') {
+  const clientBuild = path.join(__dirname, '../client/build');
+  app.use(express.static(clientBuild));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientBuild, 'index.html'));
+  });
+}
 
 // Global error handler
 app.use((err, req, res, next) => {

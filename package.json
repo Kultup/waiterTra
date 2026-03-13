@@ -8,7 +8,8 @@
     "server": "cd server && nodemon index.js",
     "client": "cd client && npm start",
     "install-all": "npm install && cd server && npm install && cd ../client && npm install",
-    "seed:game": "cd server && node seedScenario.js"
+    "seed:game": "cd server && node seedScenario.js",
+    "build": "cd client && npm run build"
   },
   "keywords": [
     "serviq",
