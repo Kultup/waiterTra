@@ -300,6 +300,9 @@ router.post('/:hash/submit', async (req, res) => {
     });
     await result.save();
 
+    // Sync student stats and emit real-time event
+    await syncStudent(studentName, studentLastName, studentCity, req.app.get('io'), result);
+
     // Return ghost items (correct positions) for overlay
     const ghostItems = targetItems.map(i => ({ type: i.type, name: i.name, icon: i.icon, x: i.x, y: i.y }));
 
