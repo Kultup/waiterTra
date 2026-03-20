@@ -28,8 +28,8 @@ router.post('/login', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
     );
 
-    logger.info('Login successful:', { username, role: user.role });
-    res.json({ token, user: { username: user.username, role: user.role, city: user.city } });
+    logger.info('Login successful:', { username, role: user.role, platform: user.platform || '' });
+    res.json({ token, user: { username: user.username, role: user.role, city: user.city, platform: user.platform || '' } });
   } catch (err) {
     logger.error('Login error:', { error: err.message, stack: err.stack });
     res.status(500).json({ error: err.message });
@@ -41,7 +41,8 @@ router.get('/me', auth, async (req, res) => {
   res.json({
     username: req.user.username,
     role: req.user.role,
-    city: req.user.city
+    city: req.user.city,
+    platform: req.user.platform || ''
   });
 });
 
@@ -64,10 +65,11 @@ router.post('/register-root', async (req, res) => {
 
 // User Management (Superadmin only)
 
-// List all users
+// List all users (scoped by platform)
 router.get('/users', auth, checkRole(['superadmin']), async (req, res) => {
   try {
-    const users = await User.find({}, '-passwordHash');
+    const filter = req.user.platform ? { platform: req.user.platform } : {};
+    const users = await User.find(filter, '-passwordHash');
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -86,7 +88,7 @@ router.post('/register', auth, checkRole(['superadmin']), async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, 8);
-    const user = new User({ username, passwordHash, role, city: city || '' });
+    const user = new User({ username, passwordHash, role, city: city || '', platform: req.user.platform || '' });
     await user.save();
 
     logger.info('User created:', { username, role });
@@ -97,10 +99,12 @@ router.post('/register', auth, checkRole(['superadmin']), async (req, res) => {
   }
 });
 
-// Delete user
+// Delete user (platform-scoped)
 router.delete('/users/:id', auth, checkRole(['superadmin']), async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
+    const filter = { _id: req.params.id };
+    if (req.user.platform) filter.platform = req.user.platform;
+    const user = await User.findOneAndDelete(filter);
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true });
   } catch (err) {
@@ -108,11 +112,13 @@ router.delete('/users/:id', auth, checkRole(['superadmin']), async (req, res) =>
   }
 });
 
-// Update user details
+// Update user details (platform-scoped)
 router.put('/users/:id', auth, checkRole(['superadmin']), async (req, res) => {
   try {
     const { username, password, role, city } = req.body;
-    const user = await User.findById(req.params.id);
+    const filter = { _id: req.params.id };
+    if (req.user.platform) filter.platform = req.user.platform;
+    const user = await User.findOne(filter);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     if (username) user.username = username;
@@ -131,10 +137,12 @@ router.put('/users/:id', auth, checkRole(['superadmin']), async (req, res) => {
   }
 });
 
-// Toggle block status
+// Toggle block status (platform-scoped)
 router.patch('/users/:id/block', auth, checkRole(['superadmin']), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const filter = { _id: req.params.id };
+    if (req.user.platform) filter.platform = req.user.platform;
+    const user = await User.findOne(filter);
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.role === 'superadmin') return res.status(403).json({ error: 'Cannot block superadmin' });
 

@@ -20,7 +20,8 @@ const gameScenarioSchema = new mongoose.Schema({
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     startNodeId: { type: String, required: true },
     nodes: [nodeSchema],
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    platform: { type: String, default: '' }
 });
 
 gameScenarioSchema.index({ targetCity: 1 });

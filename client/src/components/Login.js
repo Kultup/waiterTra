@@ -11,6 +11,8 @@ const Login = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const isFunPlatform = username.toLowerCase().includes('fun');
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -34,7 +36,10 @@ const Login = ({ onLogin }) => {
     <div className="login-container">
       <div className="login-card">
         <div className="login-logo">
-          <img src="/km-logo.png" alt="Країна Мрій" className="login-logo-img" />
+          {isFunPlatform
+            ? <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🎮 FunAdmin</div>
+            : <img src="/km-logo.png" alt="Країна Мрій" className="login-logo-img" />
+          }
           <p>Платформа навчання персоналу</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">

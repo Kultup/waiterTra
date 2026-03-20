@@ -17,7 +17,8 @@ const quizSchema = new mongoose.Schema({
     passingScore: { type: Number, default: 70 },
     hash: { type: String, required: true, unique: true },
     isActive: { type: Boolean, default: true },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    platform: { type: String, default: '' }
 });
 
 quizSchema.index({ ownerId: 1 });

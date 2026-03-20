@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 import { useToast } from '../contexts/ToastContext';
 import ConfirmModal from './ConfirmModal';
 import './QuizBuilder.css';
@@ -48,7 +48,7 @@ const QuizBuilder = () => {
 
     const fetchCities = async () => {
         try {
-            const res = await axios.get(`${API_URL}/cities`);
+            const res = await axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`);
             setCities(res.data);
         } catch (err) { console.error(err); }
     };

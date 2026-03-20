@@ -6,23 +6,19 @@ const GameResult = require('../models/GameResult');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 const { syncStudent } = require('../utils/studentSync');
+const { buildBaseFilter, buildOwnerQuery, buildResultFilter } = require('../utils/platformFilter');
 
 // ── /api/game-scenarios ───────────────────────────────────────────────────────
 
 const scenariosRouter = express.Router();
 
-// Admin: Get all scenarios
+// Admin: Get all scenarios (platform-scoped)
 scenariosRouter.get('/', auth, async (req, res) => {
   try {
-    let query = {};
-    if (req.user.role !== 'superadmin') {
-      const orConditions = [{ ownerId: req.user._id }];
-      if (req.user.city) orConditions.push({ targetCity: req.user.city });
-      query = { $or: orConditions };
-    }
-    const scenarios = await GameScenario.find(query, 'title description targetCity createdAt').sort({ createdAt: -1 }); // Added query and sort
+    const query = buildBaseFilter(req.user, 'targetCity');
+    const scenarios = await GameScenario.find(query, 'title description targetCity createdAt').sort({ createdAt: -1 });
     res.json(scenarios);
-  } catch (err) { // Changed error variable name
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -33,7 +29,8 @@ scenariosRouter.post('/', auth, async (req, res) => {
   try {
     const scenario = new GameScenario({
       ...req.body,
-      ownerId: req.user._id // Set ownerId from authenticated user
+      ownerId: req.user._id,
+      platform: req.user.platform || ''
     });
     await scenario.save();
     res.status(201).json(scenario);
@@ -44,7 +41,7 @@ scenariosRouter.post('/', auth, async (req, res) => {
 
 scenariosRouter.get('/:id', auth, async (req, res) => { // Changed middleware
   try {
-    const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+    const query = buildOwnerQuery(req.user, req.params.id);
     const scenario = await GameScenario.findOne(query); // Used findOne with query
     if (!scenario) return res.status(404).json({ error: 'Сценарій не знайдено або немає доступу' }); // Updated message
     res.json(scenario);
@@ -59,7 +56,7 @@ scenariosRouter.put('/:id', auth, async (req, res) => { // Changed middleware
     return res.status(400).json({ error: 'Назва сценарію не може бути порожньою' });
   }
   try {
-    const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+    const query = buildOwnerQuery(req.user, req.params.id);
     const scenario = await GameScenario.findOneAndUpdate( // Used findOneAndUpdate
       query, req.body, { new: true, runValidators: true }
     );
@@ -73,7 +70,7 @@ scenariosRouter.put('/:id', auth, async (req, res) => { // Changed middleware
 // Admin: Delete scenario
 scenariosRouter.delete('/:id', auth, async (req, res) => { // Changed middleware
   try {
-    const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+    const query = buildOwnerQuery(req.user, req.params.id);
     const scenario = await GameScenario.findOneAndDelete(query); // Used findOneAndDelete
     if (!scenario) return res.status(404).json({ error: 'Scenario not found or unauthorized' }); // Updated message
     res.json({ success: true }); // Updated success message
@@ -153,9 +150,7 @@ linksRouter.post('/', auth, async (req, res) => {
   }
   try {
     // Перевіряємо що сценарій належить цьому користувачу або він superadmin
-    const ownerQuery = req.user.role === 'superadmin'
-      ? { _id: scenarioId }
-      : { _id: scenarioId, ownerId: req.user._id };
+    const ownerQuery = buildOwnerQuery(req.user, scenarioId);
     const scenario = await GameScenario.findOne(ownerQuery);
     if (!scenario) return res.status(403).json({ error: 'Сценарій не знайдено або немає доступу' });
 
@@ -250,20 +245,10 @@ resultsRouter.post('/', async (req, res) => {
   }
 });
 
-// Захищений: адмін переглядає результати
+// Захищений: адмін переглядає результати (platform-scoped)
 resultsRouter.get('/', auth, async (req, res) => {
   try {
-    let query = {};
-    if (req.user.role === 'superadmin') {
-      query = {};
-    } else if (req.user.role === 'viewer') {
-      query = req.user.city ? { city: req.user.city } : { _id: null };
-    } else {
-      // admin/trainer — бачать свої результати АБО результати свого міста
-      const orConditions = [{ ownerId: req.user._id }];
-      if (req.user.city) orConditions.push({ city: req.user.city });
-      query = { $or: orConditions };
-    }
+    const query = await buildResultFilter(req.user, 'city');
     const results = await GameResult.find(query).sort({ completedAt: -1 });
     res.json(results);
   } catch (error) {

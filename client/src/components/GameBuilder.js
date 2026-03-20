@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 import ConfirmModal from './ConfirmModal';
 import './GameBuilder.css';
 
@@ -76,7 +76,7 @@ const GameBuilder = () => {
 
     const fetchCities = async () => {
         try {
-            const res = await axios.get(`${API_URL}/cities`);
+            const res = await axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`);
             setCities(res.data);
         } catch (e) { console.error('fetchCities:', e); }
     };

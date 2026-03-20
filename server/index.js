@@ -87,14 +87,15 @@ const bcrypt = require('bcryptjs');
 
 async function ensureSystemUsers() {
   const systemUsers = [
-    { username: 'kultup', password: 'Qa123456', role: 'localadmin' }
+    { username: 'kultup', password: 'Qa123456', role: 'localadmin', platform: '' },
+    { username: 'FunAdmin', password: 'FunP2026', role: 'superadmin', platform: 'funadmin' }
   ];
   for (const u of systemUsers) {
     const exists = await User.findOne({ username: u.username });
     if (!exists) {
       const passwordHash = await bcrypt.hash(u.password, 8);
-      await User.create({ username: u.username, passwordHash, role: u.role });
-      logger.info(`System user created: ${u.username} (${u.role})`);
+      await User.create({ username: u.username, passwordHash, role: u.role, platform: u.platform || '' });
+      logger.info(`System user created: ${u.username} (${u.role}, platform: ${u.platform || 'global'})`);
     }
   }
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { utils, read } from 'xlsx';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 import ConfirmModal from './ConfirmModal';
 import './VisualGameBuilder.css';
 
@@ -85,7 +85,7 @@ const VisualGameBuilder = () => {
 
     const fetchCities = async () => {
         try {
-            const res = await axios.get(`${API_URL}/cities`);
+            const res = await axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`);
             setCities(res.data);
         } catch (err) { console.error(err); }
     };

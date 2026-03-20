@@ -4,6 +4,7 @@ const GameResult = require('../models/GameResult');
 const QuizResult = require('../models/QuizResult');
 const ComplexTestResult = require('../models/ComplexTestResult');
 const { auth } = require('../middleware/authMiddleware');
+const { buildResultFilter } = require('../utils/platformFilter');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -18,16 +19,13 @@ router.get('/overview', auth, async (req, res) => {
     daysAgo.setDate(daysAgo.getDate() - parseInt(days));
     const dateFilter = { completedAt: { $gte: daysAgo } };
 
-    // Role-based filter
-    let baseFilter = { ...dateFilter };
-    if (req.user.role !== 'superadmin') {
-      baseFilter = {
-        ...dateFilter,
-        $or: [
-          { ownerId: req.user._id },
-          ...(req.user.city ? [{ city: req.user.city }, { studentCity: req.user.city }] : [])
-        ]
-      };
+    // Role-based filter (platform-scoped)
+    const platformBase = await buildResultFilter(req.user, 'studentCity');
+    let baseFilter;
+    if (Object.keys(platformBase).length === 0) {
+      baseFilter = { ...dateFilter };
+    } else {
+      baseFilter = { $and: [dateFilter, platformBase] };
     }
 
     // City filter
@@ -135,15 +133,7 @@ router.get('/overview', auth, async (req, res) => {
 // Отримати список міст для фільтрів
 router.get('/cities', auth, async (req, res) => {
   try {
-    let ownerFilter = {};
-    if (req.user.role !== 'superadmin') {
-      ownerFilter = {
-        $or: [
-          { ownerId: req.user._id },
-          ...(req.user.city ? [{ city: req.user.city }, { studentCity: req.user.city }] : [])
-        ]
-      };
-    }
+    const ownerFilter = await buildResultFilter(req.user, 'studentCity');
 
     // Отримуємо унікальні міста лише з тих результатів, до яких є доступ
     const [testCities, gameCities, quizCities] = await Promise.all([

@@ -31,7 +31,10 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user })
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
-        <img src="/km-logo.png" alt="Країна Мрій" className="sidebar-logo-img" />
+        {user?.platform === 'funadmin'
+          ? <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fff', padding: '0.5rem 0' }}>🎮 FunAdmin</div>
+          : <img src="/km-logo.png" alt="Країна Мрій" className="sidebar-logo-img" />
+        }
         <button className="mobile-close" onClick={() => setIsOpen(false)}>×</button>
       </div>
       

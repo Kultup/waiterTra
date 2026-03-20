@@ -9,6 +9,7 @@ const DeskTest = require('../models/DeskTest');
 const GameLink = require('../models/GameLink');
 const QuizLink = require('../models/QuizLink');
 const { auth, checkRole } = require('../middleware/authMiddleware');
+const { getPlatformUserIds } = require('../utils/platformFilter');
 
 const analyticsAuth = [auth, checkRole(['localadmin'])];
 

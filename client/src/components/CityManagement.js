@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 import ConfirmModal from './ConfirmModal';
 import './CityManagement.css';
 
@@ -18,7 +18,8 @@ const CityManagement = () => {
 
     const fetchCities = async () => {
         try {
-            const res = await axios.get(`${API_URL}/cities`);
+            const p = getUserPlatform();
+            const res = await axios.get(`${API_URL}/cities${p ? `?platform=${p}` : ''}`);
             setCities(res.data);
             setLoading(false);
         } catch (err) {

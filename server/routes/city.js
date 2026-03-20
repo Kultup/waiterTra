@@ -2,18 +2,21 @@ const express = require('express');
 const router = express.Router();
 const City = require('../models/City');
 const { auth } = require('../middleware/authMiddleware');
+const { platformModelFilter } = require('../utils/platformFilter');
 
-// Public: Get all cities
+// Public: Get all cities (optionally scoped by platform via query param)
 router.get('/', async (req, res) => {
     try {
-        const cities = await City.find().sort({ name: 1 });
+        // Public route — if platform query param is passed, filter by it
+        const filter = req.query.platform ? { platform: req.query.platform } : {};
+        const cities = await City.find(filter).sort({ name: 1 });
         res.json(cities);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Admin: Create city (SuperAdmin only)
+// Admin: Create city (SuperAdmin only, platform-scoped)
 router.post('/', auth, async (req, res) => {
     if (req.user.role !== 'superadmin') {
         return res.status(403).json({ error: 'Access denied' });
@@ -25,7 +28,7 @@ router.post('/', auth, async (req, res) => {
     }
 
     try {
-        const city = new City({ name: name.trim() });
+        const city = new City({ name: name.trim(), platform: req.user.platform || '' });
         await city.save();
         res.status(201).json(city);
     } catch (err) {
@@ -36,14 +39,16 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
-// Admin: Delete city (SuperAdmin only)
+// Admin: Delete city (SuperAdmin only, platform-scoped)
 router.delete('/:id', auth, async (req, res) => {
     if (req.user.role !== 'superadmin') {
         return res.status(403).json({ error: 'Access denied' });
     }
 
     try {
-        const city = await City.findByIdAndDelete(req.params.id);
+        const filter = { _id: req.params.id };
+        if (req.user.platform) filter.platform = req.user.platform;
+        const city = await City.findOneAndDelete(filter);
         if (!city) return res.status(404).json({ error: 'City not found' });
         res.json({ message: 'City deleted' });
     } catch (err) {

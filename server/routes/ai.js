@@ -1,6 +1,7 @@
 const express = require('express');
 const Groq = require('groq-sdk');
 const { auth } = require('../middleware/authMiddleware');
+const { buildResultFilter } = require('../utils/platformFilter');
 const TestResult = require('../models/TestResult');
 const GameResult = require('../models/GameResult');
 const QuizResult = require('../models/QuizResult');
@@ -35,15 +36,13 @@ router.post('/analyze', auth, async (req, res) => {
             dateFilter.completedAt = { $gte: cutoff };
         }
 
-        // Build base filter (role-based)
-        let baseFilter = { ...dateFilter };
-        if (req.user.role !== 'superadmin') {
-            const orConditions = [{ ownerId: req.user._id }];
-            if (req.user.city) {
-                orConditions.push({ studentCity: req.user.city });
-                orConditions.push({ city: req.user.city });
-            }
-            baseFilter = { ...dateFilter, $or: orConditions };
+        // Build base filter (role + platform scoped)
+        const platformBase = await buildResultFilter(req.user, 'studentCity');
+        let baseFilter;
+        if (Object.keys(platformBase).length === 0) {
+            baseFilter = { ...dateFilter };
+        } else {
+            baseFilter = { $and: [dateFilter, platformBase] };
         }
         if (city) {
             baseFilter = { ...baseFilter, $or: undefined };

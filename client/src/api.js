@@ -24,4 +24,11 @@ axios.interceptors.response.use(
   }
 );
 
+export function getUserPlatform() {
+  try {
+    const u = JSON.parse(localStorage.getItem('user') || '{}');
+    return u.platform || '';
+  } catch { return ''; }
+}
+
 export default API_URL;

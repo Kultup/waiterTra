@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './VirtualDesk.css';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 
 const Modal = ({ show, title, onClose, onConfirm, children }) => {
     if (!show) return null;
@@ -84,7 +84,7 @@ const VirtualDesk = () => {
 
     const fetchCities = async () => {
         try {
-            const res = await axios.get(`${API_URL}/cities`);
+            const res = await axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`);
             setCities(res.data);
         } catch (err) { console.error(err); }
     };

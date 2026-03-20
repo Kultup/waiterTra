@@ -7,6 +7,7 @@ const TestResult = require('../models/TestResult');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 const { syncStudent } = require('../utils/studentSync');
+const { buildBaseFilter } = require('../utils/platformFilter');
 const router = express.Router();
 
 // ── Multi-desk test (адмін створює, студент проходить) ────────────────────────
@@ -32,15 +33,10 @@ router.post('/multi', auth, async (req, res) => {
   }
 });
 
-// Admin: get all multi-desk tests
+// Admin: get all multi-desk tests (platform-scoped)
 router.get('/multi', auth, async (req, res) => {
   try {
-    let query = {};
-    if (req.user.role !== 'superadmin') {
-      const orConditions = [{ ownerId: req.user._id }];
-      if (req.user.city) orConditions.push({ targetCity: req.user.city });
-      query = { $or: orConditions };
-    }
+    const query = buildBaseFilter(req.user, 'targetCity');
     const tests = await MultiDeskTest.find(query).populate('templateIds').sort({ createdAt: -1 });
     res.json(tests);
   } catch (error) {
@@ -340,12 +336,7 @@ router.post('/', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    let query = {};
-    if (req.user.role !== 'superadmin') {
-      const orConditions = [{ ownerId: req.user._id }];
-      if (req.user.city) orConditions.push({ targetCity: req.user.city });
-      query = { $or: orConditions };
-    }
+    const query = buildBaseFilter(req.user, 'targetCity');
     const tests = await DeskTest.find(query).populate('templateId').sort({ createdAt: -1 });
     res.json(tests);
   } catch (error) {

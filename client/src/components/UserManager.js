@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 import ConfirmModal from './ConfirmModal';
 import './UserManager.css';
 
@@ -34,7 +34,7 @@ const UserManager = () => {
 
     const fetchCities = async () => {
         try {
-            const res = await axios.get(`${API_URL}/cities`);
+            const res = await axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`);
             setCities(res.data);
         } catch (err) {
             console.error('Failed to fetch cities:', err);

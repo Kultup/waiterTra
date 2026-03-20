@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './ComplexTestBuilder.css';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 import ConfirmModal from './ConfirmModal';
 
 const typeLabels = { desk: '🖥️ Сервіровка', game: '🎮 Гра', quiz: '📝 Квіз' };
@@ -41,7 +41,7 @@ const ComplexTestBuilder = () => {
 
     const fetchCities = async () => {
         try {
-            const res = await axios.get(`${API_URL}/cities`);
+            const res = await axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`);
             setCities(res.data);
         } catch (err) { console.error(err); }
     };

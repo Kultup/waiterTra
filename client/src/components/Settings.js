@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 import ConfirmModal from './ConfirmModal';
 import './Settings.css';
 
@@ -28,7 +28,7 @@ const Settings = ({ user }) => {
         setLoading(true);
         try {
             const [citiesRes, studentsRes] = await Promise.all([
-                axios.get(`${API_URL}/cities`, config),
+                axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`, config),
                 axios.get(`${API_URL}/maintenance/students`, config)
             ]);
             setCities(citiesRes.data);

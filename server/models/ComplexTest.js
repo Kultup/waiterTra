@@ -15,7 +15,8 @@ const complexTestSchema = new mongoose.Schema({
     isUsed: { type: Boolean, default: false },
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     targetCity: { type: String, default: '' },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    platform: { type: String, default: '' }
 });
 
 module.exports = mongoose.model('ComplexTest', complexTestSchema);

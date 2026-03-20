@@ -21,7 +21,8 @@ const deskTemplateSchema = new mongoose.Schema({
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     items: [deskItemSchema],
     description: { type: String, default: '' },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    platform: { type: String, default: '' }
 });
 
 deskTemplateSchema.index({ ownerId: 1, createdAt: -1 });

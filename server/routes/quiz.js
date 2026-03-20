@@ -7,16 +7,12 @@ const QuizLink = require('../models/QuizLink');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 const { syncStudent } = require('../utils/studentSync');
+const { buildBaseFilter, buildOwnerQuery } = require('../utils/platformFilter');
 
-// Admin: Get all quizzes
+// Admin: Get all quizzes (platform-scoped)
 router.get('/', auth, async (req, res) => {
     try {
-        let query = {};
-        if (req.user.role !== 'superadmin') {
-            const orConditions = [{ ownerId: req.user._id }];
-            if (req.user.city) orConditions.push({ city: req.user.city });
-            query = { $or: orConditions };
-        }
+        const query = buildBaseFilter(req.user, 'city');
         const quizzes = await Quiz.find(query).sort({ createdAt: -1 });
         res.json(quizzes);
     } catch (err) {
@@ -55,7 +51,8 @@ router.post('/', auth, async (req, res) => {
             passingScore: passingScore || 70,
             hash,
             isActive: true,
-            ownerId: req.user._id
+            ownerId: req.user._id,
+            platform: req.user.platform || ''
         });
         await quiz.save();
         console.log('Quiz created:', quiz._id);
@@ -72,9 +69,7 @@ router.post('/links', auth, async (req, res) => {
     if (!quizId) return res.status(400).json({ error: 'quizId is required' });
     try {
         // Перевіряємо що квіз належить цьому користувачу або він superadmin
-        const ownerQuery = req.user.role === 'superadmin'
-            ? { _id: quizId }
-            : { _id: quizId, ownerId: req.user._id };
+        const ownerQuery = buildOwnerQuery(req.user, quizId);
         const quiz = await Quiz.findOne(ownerQuery);
         if (!quiz) return res.status(403).json({ error: 'Квіз не знайдено або немає доступу' });
 
@@ -90,7 +85,7 @@ router.post('/links', auth, async (req, res) => {
 // Admin: Update quiz
 router.put('/:id', auth, async (req, res) => {
     try {
-        const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+        const query = buildOwnerQuery(req.user, req.params.id);
         const updateData = { ...req.body };
         if (updateData.targetCity !== undefined) {
             updateData.city = updateData.targetCity;
@@ -113,7 +108,7 @@ router.put('/:id', auth, async (req, res) => {
 // Admin: Delete quiz
 router.delete('/:id', auth, async (req, res) => {
     try {
-        const query = req.user.role === 'superadmin' ? { _id: req.params.id } : { _id: req.params.id, ownerId: req.user._id };
+        const query = buildOwnerQuery(req.user, req.params.id);
         const quiz = await Quiz.findOneAndDelete(query);
         if (!quiz) return res.status(404).json({ error: 'Quiz not found or unauthorized' });
         res.json({ success: true });
@@ -250,20 +245,11 @@ router.post('/hash/:hash/submit', async (req, res) => {
     }
 });
 
-// Admin: Get all results
+// Admin: Get all results (platform-scoped)
 router.get('/results', auth, async (req, res) => {
     try {
-        let query = {};
-        if (req.user.role === 'superadmin') {
-            query = {};
-        } else if (req.user.role === 'viewer') {
-            query = req.user.city ? { studentCity: req.user.city } : { _id: null };
-        } else {
-            // admin/trainer — бачать свої результати АБО результати свого міста
-            const orConditions = [{ ownerId: req.user._id }];
-            if (req.user.city) orConditions.push({ studentCity: req.user.city });
-            query = { $or: orConditions };
-        }
+        const { buildResultFilter } = require('../utils/platformFilter');
+        const query = await buildResultFilter(req.user, 'studentCity');
         const results = await QuizResult.find(query).populate('quizId', 'title').sort({ completedAt: -1 });
         res.json(results);
     } catch (err) {

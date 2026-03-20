@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import * as XLSX from 'xlsx';
-import API_URL from '../api';
+import API_URL, { getUserPlatform } from '../api';
 import './TestResults.css';
 
 const formatDate = (dateStr) =>
@@ -445,7 +445,7 @@ const TestResults = ({ user }) => {
     };
 
     useEffect(() => {
-        axios.get(`${API_URL}/cities`, {
+        axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         }).then(res => setCities(res.data)).catch(() => {});
     }, []);

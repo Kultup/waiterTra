@@ -8,28 +8,17 @@ const Quiz = require('../models/Quiz');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 const { syncStudent } = require('../utils/studentSync');
+const { buildBaseFilter, buildOwnerQuery, buildResultFilter } = require('../utils/platformFilter');
 
 const crypto = require('crypto');
 const ComplexTestLink = require('../models/ComplexTestLink');
 
 // ── Admin: CRUD ──────────────────────────────────────────────────────────────
 
-// Get all complex tests
+// Get all complex tests (platform-scoped)
 router.get('/', auth, async (req, res) => {
     try {
-        let query = {};
-        if (req.user.role !== 'superadmin') {
-            query = {
-                $or: [
-                    { ownerId: req.user._id },
-                    { targetCity: req.user.city }
-                ]
-            };
-            // Ensure we don't match empty targetCity if req.user.city is empty (though admins should have a city)
-            if (!req.user.city) {
-                query.$or = [{ ownerId: req.user._id }];
-            }
-        }
+        const query = buildBaseFilter(req.user, 'targetCity');
         const tests = await ComplexTest.find(query).sort({ createdAt: -1 });
         res.json(tests);
     } catch (err) {
@@ -49,7 +38,8 @@ router.post('/', auth, async (req, res) => {
     try {
         const test = new ComplexTest({
             ...req.body,
-            ownerId: req.user._id
+            ownerId: req.user._id,
+            platform: req.user.platform || ''
         });
         await test.save();
         res.status(201).json(test);
@@ -79,9 +69,7 @@ router.post('/links', auth, async (req, res) => {
 // Update complex test
 router.put('/:id', auth, async (req, res) => {
     try {
-        const query = req.user.role === 'superadmin'
-            ? { _id: req.params.id }
-            : { _id: req.params.id, ownerId: req.user._id };
+        const query = buildOwnerQuery(req.user, req.params.id);
         const test = await ComplexTest.findOneAndUpdate(query, req.body, { new: true, runValidators: true });
         if (!test) return res.status(404).json({ error: 'Тест не знайдено або немає доступу' });
         res.json(test);
@@ -93,9 +81,7 @@ router.put('/:id', auth, async (req, res) => {
 // Delete complex test
 router.delete('/:id', auth, async (req, res) => {
     try {
-        const query = req.user.role === 'superadmin'
-            ? { _id: req.params.id }
-            : { _id: req.params.id, ownerId: req.user._id };
+        const query = buildOwnerQuery(req.user, req.params.id);
         const test = await ComplexTest.findOneAndDelete(query);
         if (!test) return res.status(404).json({ error: 'Тест не знайдено або немає доступу' });
         res.json({ success: true });
@@ -108,7 +94,7 @@ router.delete('/:id', auth, async (req, res) => {
 
 router.get('/available-items', auth, async (req, res) => {
     try {
-        const ownerQuery = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+        const ownerQuery = buildBaseFilter(req.user, 'targetCity');
         const [templates, scenarios, quizzes] = await Promise.all([
             DeskTemplate.find(ownerQuery, 'templateName timeLimit items').sort({ createdAt: -1 }),
             GameScenario.find(ownerQuery, 'title description').sort({ createdAt: -1 }),
@@ -308,20 +294,10 @@ router.post('/hash/:hash/submit', async (req, res) => {
     }
 });
 
-// Admin: Get results
+// Admin: Get results (platform-scoped)
 router.get('/results', auth, async (req, res) => {
     try {
-        let query = {};
-        if (req.user.role === 'superadmin') {
-            query = {};
-        } else if (req.user.role === 'viewer') {
-            query = req.user.city ? { studentCity: req.user.city } : { _id: null };
-        } else {
-            // admin/trainer — бачать свої результати АБО результати свого міста
-            const orConditions = [{ ownerId: req.user._id }];
-            if (req.user.city) orConditions.push({ studentCity: req.user.city });
-            query = { $or: orConditions };
-        }
+        const query = await buildResultFilter(req.user, 'studentCity');
         const results = await ComplexTestResult.find(query)
             .populate('complexTestId', 'title')
             .sort({ completedAt: -1 });
