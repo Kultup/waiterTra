@@ -34,8 +34,7 @@ const Login = ({ onLogin }) => {
     <div className="login-container">
       <div className="login-card">
         <div className="login-logo">
-          <span className="login-logo-icon">🍽️</span>
-          <h1>ServIQ</h1>
+          <img src="/km-logo.png" alt="Країна Мрій" className="login-logo-img" />
           <p>Платформа навчання персоналу</p>
         </div>
         <form onSubmit={handleSubmit} className="login-form">

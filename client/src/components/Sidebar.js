@@ -30,7 +30,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user })
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
-        <h2>ServIQ</h2>
+        <img src="/km-logo.png" alt="Країна Мрій" className="sidebar-logo-img" />
         <button className="mobile-close" onClick={() => setIsOpen(false)}>×</button>
       </div>
       

@@ -19,14 +19,12 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.sidebar-logo h2 {
-    margin: 0;
-    font-size: 1.5rem;
-    background: linear-gradient(45deg, #00d2ff, #3a7bd5);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-weight: 800;
+.sidebar-logo-img {
+    max-width: 140px;
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
 }
 
 .sidebar-nav {

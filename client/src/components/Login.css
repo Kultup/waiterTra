@@ -21,19 +21,12 @@
   margin-bottom: 2rem;
 }
 
-.login-logo-icon {
-  font-size: 2.5rem;
+.login-logo-img {
+  max-width: 200px;
+  width: 100%;
+  height: auto;
   display: block;
-  margin-bottom: 0.5rem;
-}
-
-.login-logo h1 {
-  margin: 0;
-  font-size: 1.6rem;
-  background: linear-gradient(135deg, #38bdf8, #818cf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  margin: 0 auto 0.5rem;
 }
 
 .login-logo p {

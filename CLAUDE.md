@@ -56,6 +56,7 @@ cd client && npm run build
 - `PORT` — defaults to `5000`
 - `JWT_SECRET` — required for authentication
 - `JWT_EXPIRES_IN` — defaults to `8h`
+- `GROQ_API_KEY` — required for AI analysis feature (Groq `llama-3.3-70b-versatile`)
 
 `client/.env` contains `HOST=0.0.0.0` which binds to all network interfaces. The `API_URL` in `client/src/api.js` uses `window.location.hostname` so it adapts to localhost or any LAN IP automatically.
 
@@ -130,6 +131,7 @@ server/
 | `GET /api/analytics/traffic` | Daily traffic chart data |
 | `GET /api/analytics/tests` | Top tests by views |
 | `POST /api/upload` | File upload (multer) |
+| `POST /api/ai/analyze` | AI-powered staff performance analysis via Groq (requires `GROQ_API_KEY`) |
 
 **Data isolation:** Non-superadmin users only see content they own (`ownerId: req.user._id`). `viewer` role is additionally filtered by `city`. The analytics routes require `localadmin` role via `checkRole(['localadmin'])`.
 
