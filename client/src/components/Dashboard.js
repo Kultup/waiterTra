@@ -77,7 +77,8 @@ const Dashboard = ({ user }) => {
             setCategoryData([
                 { name: 'Сервірування', value: data.byType.test },
                 { name: 'Гра', value: data.byType.game },
-                { name: 'Квіз', value: data.byType.quiz }
+                { name: 'Квіз', value: data.byType.quiz },
+                { name: 'Комплексний', value: data.byType.complex || 0 }
             ]);
 
             setTrendData(data.chartData);

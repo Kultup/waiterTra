@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import { io } from 'socket.io-client';
 import * as XLSX from 'xlsx';
 import API_URL from '../api';
 import './TestResults.css';
@@ -85,6 +86,10 @@ const DetailModal = ({ show, onClose, children, title }) => {
 // ── Desk detail ──────────────────────────────────────────────────────────────
 
 const DeskDetail = ({ item, cities, canEdit, onCityChange }) => {
+    const nameMap = {};
+    (item.targetItems || []).forEach(t => { if (t.type && t.name) nameMap[t.type] = t.name; });
+    const getName = (i) => i.name || nameMap[i.type] || i.icon || i.type;
+
     const wrongItems = (item.userItems || []).filter(i => !i.isCorrect);
     const missingItems = (item.targetItems || []).filter(target =>
         !(item.userItems || []).some(ui => ui.type === target.type && ui.isCorrect)
@@ -111,7 +116,7 @@ const DeskDetail = ({ item, cities, canEdit, onCityChange }) => {
                     {wrongItems.length > 0 && (
                         <ErrorGroup label={`❌ Неправильно розміщені (${wrongItems.length})`}>
                             {wrongItems.map((it, i) => (
-                                <ErrorItem key={i} icon={it.icon} name={it.name || it.type}
+                                <ErrorItem key={i} icon={it.icon} name={getName(it)}
                                     hint={`(${Math.round(it.x)}, ${Math.round(it.y)})`} type="wrong" />
                             ))}
                         </ErrorGroup>
@@ -119,7 +124,7 @@ const DeskDetail = ({ item, cities, canEdit, onCityChange }) => {
                     {missingItems.length > 0 && (
                         <ErrorGroup label={`⚠️ Пропущені предмети (${missingItems.length})`}>
                             {missingItems.map((it, i) => (
-                                <ErrorItem key={i} icon={it.icon} name={it.name || it.type}
+                                <ErrorItem key={i} icon={it.icon} name={getName(it)}
                                     hint={`(${Math.round(it.x)}, ${Math.round(it.y)})`} type="missing" />
                             ))}
                         </ErrorGroup>
@@ -468,6 +473,37 @@ const TestResults = ({ user }) => {
 
     useEffect(() => { fetchAll(); }, []);
 
+    // WebSocket real-time updates
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        const socket = io(API_URL.replace('/api', ''), {
+            transports: ['websocket'],
+            forceNew: true,
+            auth: { token }
+        });
+
+        socket.on('NEW_RESULT', (newResult) => {
+            console.log('Real-time result received:', newResult);
+            
+            // Determine result type and update state if it matches user's city
+            const city = newResult.studentCity || newResult.playerCity || newResult.city;
+            if (isAdminCityOnly && city?.toLowerCase() !== user.city.toLowerCase()) return;
+
+            // Map the result to the correct state
+            if (newResult.templateName && !newResult.complexTestId) {
+                setDeskResults(prev => [newResult, ...prev]);
+            } else if (newResult.scenarioTitle) {
+                setGameResults(prev => [newResult, ...prev]);
+            } else if (newResult.quizId) {
+                setQuizResults(prev => [newResult, ...prev]);
+            } else if (newResult.complexTestId) {
+                setComplexResults(prev => [newResult, ...prev]);
+            }
+        });
+
+        return () => socket.disconnect();
+    }, [user, isAdminCityOnly]);
+
     const openDetail = (type, item) => { setDetailType(type); setDetailItem(item); };
     const closeDetail = () => { setDetailItem(null); setDetailType(null); };
 
@@ -580,41 +616,193 @@ const TestResults = ({ user }) => {
         }
     };
 
+    const autoWidth = (ws, data) => {
+        if (!data.length) return;
+        const keys = Object.keys(data[0]);
+        ws['!cols'] = keys.map(k => {
+            const maxLen = Math.max(k.length, ...data.map(r => String(r[k] || '').length));
+            return { wch: Math.min(maxLen + 2, 60) };
+        });
+    };
+
     const exportToExcel = () => {
         const dateStr = new Date().toISOString().split('T')[0];
         const filename = `results_${filterCity || 'all'}_${filterDays || 'all'}d_${dateStr}.xlsx`;
-        let data = [];
-        if (tab === 'desk') {
-            data = filteredDesk.map(r => ({
-                'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
-                'Місто': r.studentCity, 'Посада': r.studentPosition || '—', 'Шаблон': r.templateName,
-                'Результат': `${r.score}/${r.total}`, 'Відсоток': `${r.percentage}%`,
-                'Статус': r.passed ? 'Пройдено' : 'Не здано',
-            }));
-        } else if (tab === 'game') {
-            data = filteredGame.map(r => ({
-                'Дата': formatDate(r.completedAt), 'Прізвище': r.playerLastName, 'Ім\'я': r.playerName,
-                'Місто': r.playerCity, 'Посада': r.playerPosition || '—', 'Сценарій': r.scenarioTitle,
-                'Кінцівка': r.endingTitle || '—', 'Результат': r.isWin ? 'Перемога' : 'Поразка',
-            }));
-        } else if (tab === 'quiz') {
-            data = filteredQuiz.map(r => ({
-                'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
-                'Місто': r.studentCity, 'Посада': r.studentPosition || '—',
-                'Квіз': r.quizId?.title || 'Видалений', 'Бали': `${r.score}/${r.total}`,
-                'Відсоток': `${r.percentage}%`,
-            }));
-        } else {
-            data = filteredComplex.map(r => ({
-                'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
-                'Місто': r.studentCity, 'Посада': r.studentPosition || '—',
-                'Тест': r.complexTestId?.title || 'Видалений', 'Кроків': r.steps?.length || 0,
-                'Статус': r.overallPassed ? 'Пройдено' : 'Не здано',
-            }));
-        }
-        const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Results');
+
+        // ── Desk ──
+        const deskData = filteredDesk.map(r => {
+            // Build a lookup from type → name using targetItems (always has names)
+            const nameMap = {};
+            (r.targetItems || []).forEach(t => { if (t.type && t.name) nameMap[t.type] = t.name; });
+            const getName = (item) => item.name || nameMap[item.type] || item.icon || item.type;
+
+            const wrongItems = (r.userItems || []).filter(i => !i.isCorrect);
+            const missingItems = (r.targetItems || []).filter(target =>
+                !(r.userItems || []).some(ui => ui.type === target.type && ui.isCorrect)
+            );
+            return {
+                'Дата': formatDate(r.completedAt),
+                'Прізвище': r.studentLastName,
+                "Ім'я": r.studentName,
+                'Місто': r.studentCity,
+                'Посада': r.studentPosition || '—',
+                'Шаблон': r.templateName,
+                'Результат': `${r.score}/${r.total}`,
+                'Відсоток': r.percentage,
+                'Статус': r.passed ? 'Пройдено' : 'Не здано',
+                'Неправильно розміщені': wrongItems.map(getName).join(', ') || '—',
+                'Пропущені предмети': missingItems.map(getName).join(', ') || '—',
+            };
+        });
+        if (deskData.length) {
+            const ws = XLSX.utils.json_to_sheet(deskData);
+            autoWidth(ws, deskData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Сервірування');
+        }
+
+        // ── Game ──
+        const gameData = filteredGame.map(r => ({
+            'Дата': formatDate(r.completedAt),
+            'Прізвище': r.playerLastName,
+            "Ім'я": r.playerName,
+            'Місто': r.playerCity,
+            'Посада': r.playerPosition || '—',
+            'Сценарій': r.scenarioTitle,
+            'Кінцівка': r.endingTitle || '—',
+            'Статус': r.isWin ? 'Перемога' : 'Поразка',
+            'Шлях вибору': (r.choicePath || []).map(cp => cp.choiceText).join(' → ') || '—',
+        }));
+        if (gameData.length) {
+            const ws = XLSX.utils.json_to_sheet(gameData);
+            autoWidth(ws, gameData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Гра');
+        }
+
+        // ── Quiz ──
+        const quizData = filteredQuiz.map(r => {
+            const row = {
+                'Дата': formatDate(r.completedAt),
+                'Прізвище': r.studentLastName,
+                "Ім'я": r.studentName,
+                'Місто': r.studentCity,
+                'Посада': r.studentPosition || '—',
+                'Квіз': r.quizId?.title || 'Видалений',
+                'Результат': `${r.score}/${r.total}`,
+                'Відсоток': r.percentage,
+                'Статус': r.passed ? 'Пройдено' : 'Не здано',
+                'Помилок': (r.answers || []).filter(a => !a.isCorrect).length,
+            };
+            // Add each question as a column
+            (r.answers || []).forEach((a, i) => {
+                row[`П${i + 1}`] = a.isCorrect ? '✓' : `✗ (${a.givenAnswer})`;
+            });
+            return row;
+        });
+        if (quizData.length) {
+            const ws = XLSX.utils.json_to_sheet(quizData);
+            autoWidth(ws, quizData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Квіз');
+        }
+
+        // ── Complex ──
+        const complexData = filteredComplex.map(r => {
+            const row = {
+                'Дата': formatDate(r.completedAt),
+                'Прізвище': r.studentLastName,
+                "Ім'я": r.studentName,
+                'Місто': r.studentCity,
+                'Посада': r.studentPosition || '—',
+                'Тест': r.complexTestId?.title || 'Видалений',
+                'Кроків': r.steps?.length || 0,
+                'Статус': r.overallPassed ? 'Пройдено' : 'Не здано',
+            };
+            (r.steps || []).forEach((s, i) => {
+                row[`Крок ${i + 1}: ${s.title || s.type}`] = `${s.score}/${s.total} (${s.percentage}%) ${s.passed ? '✓' : '✗'}`;
+            });
+            return row;
+        });
+        if (complexData.length) {
+            const ws = XLSX.utils.json_to_sheet(complexData);
+            autoWidth(ws, complexData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Комплексний');
+        }
+
+        // ── Summary sheet ──
+        const summaryData = [];
+        const addSummary = (label, items, passedFn, pctFn) => {
+            if (!items.length) return;
+            const passed = items.filter(passedFn).length;
+            const avg = pctFn ? Math.round(items.reduce((s, r) => s + pctFn(r), 0) / items.length) : null;
+            summaryData.push({
+                'Тип': label,
+                'Всього': items.length,
+                'Здали': passed,
+                'Не здали': items.length - passed,
+                'Успішність %': Math.round(passed / items.length * 100),
+                'Середній %': avg ?? '—',
+            });
+        };
+        addSummary('Сервірування', filteredDesk, r => r.passed, r => r.percentage);
+        addSummary('Гра', filteredGame, r => r.isWin, null);
+        addSummary('Квіз', filteredQuiz, r => r.passed, r => r.percentage);
+        addSummary('Комплексний', filteredComplex, r => r.overallPassed, null);
+
+        // Total row
+        const allItems = [...filteredDesk, ...filteredGame, ...filteredQuiz, ...filteredComplex];
+        if (allItems.length) {
+            const totalPassed = filteredDesk.filter(r => r.passed).length
+                + filteredGame.filter(r => r.isWin).length
+                + filteredQuiz.filter(r => r.passed).length
+                + filteredComplex.filter(r => r.overallPassed).length;
+            summaryData.push({
+                'Тип': 'ЗАГАЛОМ',
+                'Всього': allItems.length,
+                'Здали': totalPassed,
+                'Не здали': allItems.length - totalPassed,
+                'Успішність %': Math.round(totalPassed / allItems.length * 100),
+                'Середній %': '—',
+            });
+        }
+
+        // City breakdown
+        const cityMap = {};
+        const addCity = (items, cityFn, passedFn) => {
+            items.forEach(r => {
+                const c = cityFn(r) || 'Невідомо';
+                if (!cityMap[c]) cityMap[c] = { total: 0, passed: 0 };
+                cityMap[c].total++;
+                if (passedFn(r)) cityMap[c].passed++;
+            });
+        };
+        addCity(filteredDesk, r => r.studentCity, r => r.passed);
+        addCity(filteredGame, r => r.playerCity, r => r.isWin);
+        addCity(filteredQuiz, r => r.studentCity, r => r.passed);
+        addCity(filteredComplex, r => r.studentCity, r => r.overallPassed);
+
+        const cityData = Object.entries(cityMap).map(([city, d]) => ({
+            'Місто': city,
+            'Всього': d.total,
+            'Здали': d.passed,
+            'Не здали': d.total - d.passed,
+            'Успішність %': Math.round(d.passed / d.total * 100),
+        })).sort((a, b) => b['Всього'] - a['Всього']);
+
+        if (summaryData.length) {
+            const ws = XLSX.utils.json_to_sheet(summaryData);
+            autoWidth(ws, summaryData);
+            // Add city table below with a gap
+            if (cityData.length) {
+                XLSX.utils.sheet_add_json(ws, cityData, { origin: `A${summaryData.length + 3}` });
+            }
+            XLSX.utils.book_append_sheet(wb, ws, 'Зведення');
+        }
+
+        // If no sheets at all, add empty one
+        if (!wb.SheetNames.length) {
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ 'Немає даних': '' }]), 'Пусто');
+        }
+
         XLSX.writeFile(wb, filename);
     };
 

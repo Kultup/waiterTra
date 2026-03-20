@@ -2,6 +2,7 @@ const express = require('express');
 const TestResult = require('../models/TestResult');
 const GameResult = require('../models/GameResult');
 const QuizResult = require('../models/QuizResult');
+const ComplexTestResult = require('../models/ComplexTestResult');
 const { auth } = require('../middleware/authMiddleware');
 const logger = require('../utils/logger');
 
@@ -12,10 +13,16 @@ router.get('/overview', auth, async (req, res) => {
   try {
     const { city, days = 30 } = req.query;
 
-    // Базова фільтрація: superadmin бачить все, решта — своє + своє місто
-    let baseFilter = {};
+    // Date filter
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - parseInt(days));
+    const dateFilter = { completedAt: { $gte: daysAgo } };
+
+    // Role-based filter
+    let baseFilter = { ...dateFilter };
     if (req.user.role !== 'superadmin') {
       baseFilter = {
+        ...dateFilter,
         $or: [
           { ownerId: req.user._id },
           ...(req.user.city ? [{ city: req.user.city }, { studentCity: req.user.city }] : [])
@@ -23,38 +30,40 @@ router.get('/overview', auth, async (req, res) => {
       };
     }
 
-    // Додаткова фільтрація по місту з запиту (якщо superadmin хоче конкретне місто, або admin хоче фільтр)
+    // City filter
     const getFilter = (cityField) => {
-      const filter = { ...baseFilter };
       if (city) {
-        // Якщо вказано конкретне місто в query, воно має пріоритет (або звужує пошук)
-        // Але для адміна ми вже обмежили базу його містом (чере baseFilter)
-        // Тож якщо адмін спробує глянути чуже місто, baseFilter його обмежить.
-        return { $and: [filter, { [cityField]: city }] };
+        return { $and: [baseFilter, { [cityField]: city }] };
       }
-      return filter;
+      return baseFilter;
     };
 
     const testFilter = getFilter('studentCity');
     const quizFilter = getFilter('studentCity');
     const gameFilter = getFilter('city');
+    const complexFilter = getFilter('studentCity');
 
-    const daysAgo = new Date();
-    daysAgo.setDate(daysAgo.getDate() - parseInt(days));
-
-    const [testResults, gameResults, quizResults] = await Promise.all([
+    const [testResults, gameResults, quizResults, complexResults] = await Promise.all([
       TestResult.find(testFilter).sort({ completedAt: -1 }),
       GameResult.find(gameFilter).sort({ completedAt: -1 }),
-      QuizResult.find(quizFilter).sort({ completedAt: -1 })
+      QuizResult.find(quizFilter).sort({ completedAt: -1 }),
+      ComplexTestResult.find(complexFilter).sort({ completedAt: -1 })
     ]);
+
+    const complexPct = (r) => {
+      if (!r.steps || r.steps.length === 0) return 0;
+      const avg = r.steps.reduce((s, st) => s + (st.percentage || 0), 0) / r.steps.length;
+      return Math.round(avg);
+    };
 
     const allResults = [
       ...testResults.map(r => ({ ...r.toObject(), type: 'test', passed: r.passed, percentage: r.percentage })),
-      ...gameResults.map(r => ({ ...r.toObject(), type: 'game', passed: r.isWin })),
-      ...quizResults.map(r => ({ ...r.toObject(), type: 'quiz', passed: r.percentage >= 80, percentage: r.percentage }))
+      ...gameResults.map(r => ({ ...r.toObject(), type: 'game', passed: r.isWin, percentage: r.isWin ? 100 : 0 })),
+      ...quizResults.map(r => ({ ...r.toObject(), type: 'quiz', passed: r.percentage >= 80, percentage: r.percentage })),
+      ...complexResults.map(r => ({ ...r.toObject(), type: 'complex', passed: r.overallPassed, percentage: complexPct(r) }))
     ];
 
-    // Статистика по днях (останні 14 днів)
+    // Статистика по днях
     const resultsByDay = {};
     allResults.forEach(result => {
       const date = new Date(result.completedAt).toLocaleDateString('uk-UA');
@@ -90,6 +99,9 @@ router.get('/overview', auth, async (req, res) => {
         : 0,
       quiz: quizResults.length > 0
         ? Math.round(quizResults.reduce((sum, r) => sum + r.percentage, 0) / quizResults.length)
+        : 0,
+      complex: complexResults.length > 0
+        ? Math.round((complexResults.filter(r => r.overallPassed).length / complexResults.length) * 100)
         : 0
     };
 
@@ -109,7 +121,8 @@ router.get('/overview', auth, async (req, res) => {
       byType: {
         test: testResults.length,
         game: gameResults.length,
-        quiz: quizResults.length
+        quiz: quizResults.length,
+        complex: complexResults.length
       },
       recentResults: allResults.slice(0, 10)
     });

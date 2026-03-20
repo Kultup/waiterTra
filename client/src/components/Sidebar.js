@@ -6,6 +6,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user })
   const mainMenu = [
     { id: 'dashboard', label: 'Панель', icon: '📊', roles: ['superadmin', 'admin', 'trainer', 'viewer'] },
     { id: 'test-results', label: 'Результати', icon: '✅', roles: ['superadmin', 'admin', 'trainer', 'viewer'] },
+    { id: 'students', label: 'Студенти', icon: '👥', roles: ['superadmin', 'admin'] },
     { id: 'analytics', label: 'Аналітика', icon: '📈', roles: ['localadmin'] },
   ];
 
@@ -22,7 +23,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, user })
     { id: 'users', label: 'Користувачі', icon: '👥', roles: ['superadmin'] },
     { id: 'cities', label: 'Міста', icon: '🏙️', roles: ['superadmin'] },
     { id: 'dishes', label: 'Посуд', icon: '🍽️', roles: ['superadmin', 'admin'] },
-    { id: 'settings', label: 'Налаштування', icon: '⚙️', roles: ['superadmin'] },
+    { id: 'settings', label: 'Налаштування', icon: '⚙️', roles: ['superadmin', 'admin'] },
   ];
 
   const filterByRole = (items) => items.filter(item => !item.roles || item.roles.includes(user?.role));

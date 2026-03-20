@@ -10,6 +10,7 @@ const deskItemSchema = new mongoose.Schema({
     y: { type: Number },
     rotation: { type: Number, default: 0 },
     image: { type: String },
+    icon: { type: String },
     category: { type: String }
 });
 

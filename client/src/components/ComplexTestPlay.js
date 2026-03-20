@@ -1,33 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import './VirtualDesk.css';
 import './ComplexTestPlay.css';
 import API_URL from '../api';
-
-// Removed hardcoded dishList. Fetching dynamically now.
-
-const VideoPlayer = ({ url }) => {
-    if (!url) return null;
-    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/);
-    if (ytMatch && ytMatch[1]) {
-        const videoId = ytMatch[1].split('&')[0];
-        return (
-            <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${videoId}`}
-                title="YouTube video player" frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
-        );
-    }
-    const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
-    if (vimeoMatch && vimeoMatch[1]) {
-        return (
-            <iframe src={`https://player.vimeo.com/video/${vimeoMatch[1]}`} width="100%" height="100%"
-                frameBorder="0" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen></iframe>
-        );
-    }
-    const videoSrc = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}${url}`;
-    return <video controls style={{ width: '100%', height: '100%' }}><source src={videoSrc} /></video>;
-};
+import DeskEngine from './DeskEngine';
+import QuizEngine from './QuizEngine';
 
 const ComplexTestPlay = () => {
     const { hash } = useParams();
@@ -42,24 +20,16 @@ const ComplexTestPlay = () => {
     const [stepResults, setStepResults] = useState([]);
     const [showSummary, setShowSummary] = useState(false);
 
-    // Desk state
-    const [deskItems, setDeskItems] = useState([]);
-    const [dishes, setDishes] = useState([]);
-    const [selectedDish, setSelectedDish] = useState(null);
-    const [deskResult, setDeskResult] = useState(null);
-    const [timeLeft, setTimeLeft] = useState(null);
-    const handleDeskCheckRef = useRef(null);
+    // Per-step completion flag (set by engines via callbacks)
+    const [stepDone, setStepDone] = useState(false);
+    const [currentStepResult, setCurrentStepResult] = useState(null);
 
-    // Game state
+    // Dishes for desk steps
+    const [dishes, setDishes] = useState([]);
+
+    // Game state (no shared engine — stays inline)
     const [currentNodeId, setCurrentNodeId] = useState(null);
     const [gameEnding, setGameEnding] = useState(null);
-
-    // Quiz state
-    const [quizAnswers, setQuizAnswers] = useState({});
-    const [currentQuestion, setCurrentQuestion] = useState(0);
-    const [quizRevealed, setQuizRevealed] = useState(false);
-    const [quizDone, setQuizDone] = useState(false);
-    const [quizResult, setQuizResult] = useState(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -72,18 +42,10 @@ const ComplexTestPlay = () => {
                 if (testRes.data.city) {
                     setStudentInfo(prev => ({ ...prev, city: testRes.data.city }));
                 }
-
-                const mappedDishes = dishesRes.data.map(d => ({
-                    ...d,
-                    id: d._id
-                }));
-                setDishes(mappedDishes);
-                if (mappedDishes.length > 0) setSelectedDish(mappedDishes[0]);
+                setDishes(dishesRes.data.map(d => ({ ...d, id: d._id })));
             } catch (err) {
                 console.error('Error fetching complex test data:', err);
-                if (err.response?.status === 410) {
-                    navigate('/inactive');
-                }
+                if (err.response?.status === 410) navigate('/inactive');
             } finally {
                 setLoading(false);
             }
@@ -91,47 +53,21 @@ const ComplexTestPlay = () => {
         fetchData();
     }, [hash]);
 
-
     const steps = testData?.steps || [];
     const step = steps[currentStep];
 
-    // Reset step-specific state when step changes
+    // Reset per-step state when step changes
     useEffect(() => {
         if (!step) return;
-        setDeskItems([]);
-        setDeskResult(null);
-        if (dishes.length > 0) setSelectedDish(dishes[0]);
-        setTimeLeft(null);
+        setStepDone(false);
+        setCurrentStepResult(null);
         setCurrentNodeId(null);
         setGameEnding(null);
-        setQuizAnswers({});
-        setCurrentQuestion(0);
-        setQuizRevealed(false);
-        setQuizDone(false);
-        setQuizResult(null);
 
         if (step.type === 'game' && step.refData) {
             setCurrentNodeId(step.refData.startNodeId);
         }
     }, [currentStep, step]);
-
-    // Timer for desk steps
-    useEffect(() => {
-        if (!isRegistered || !step || step.type !== 'desk') return;
-        const tl = step.timeLimit || step.refData?.timeLimit || 0;
-        if (tl > 0 && !deskResult) {
-            setTimeLeft(tl * 60);
-        }
-    }, [isRegistered, currentStep, step, deskResult]);
-
-    useEffect(() => {
-        if (timeLeft === null || deskResult) return;
-        if (timeLeft === 0) { handleDeskCheckRef.current?.(); return; }
-        const timer = setInterval(() => setTimeLeft(p => p - 1), 1000);
-        return () => clearInterval(timer);
-    }, [timeLeft, deskResult]);
-
-    const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
     const handleRegister = (e) => {
         e.preventDefault();
@@ -142,127 +78,56 @@ const ComplexTestPlay = () => {
         }
     };
 
-    // ── Desk handlers ───────────────────────────────────────
-    const handleDeskClick = (e) => {
-        if (deskResult) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width * 500;
-        const y = (e.clientY - rect.top) / rect.height * 500;
-        setDeskItems(prev => [...prev, {
-            _id: Date.now().toString(), name: selectedDish.name,
-            icon: selectedDish.icon, x, y, type: selectedDish.id
-        }]);
-    };
-
-    const handleDeleteDeskItem = (id) => {
-        if (deskResult) return;
-        setDeskItems(prev => prev.filter(i => i._id !== id));
-    };
-
-    const handleDeskCheck = () => {
-        const refData = step?.refData;
-        if (!refData) return;
-        const tolerance = 50;
-        const targetItems = refData.items;
-        let score = 0;
-
-        const validated = deskItems.map(ui => {
-            const match = targetItems.find(t =>
-                ui.type === t.type && Math.abs(ui.x - t.x) < tolerance && Math.abs(ui.y - t.y) < tolerance
-            );
-            return { ...ui, isCorrect: !!match };
+    // ── Desk: server-side scoring via /check-desk-step ──
+    const handleDeskSubmit = async (items) => {
+        const res = await axios.post(`${API_URL}/complex-tests/check-desk-step`, {
+            hash, stepIndex: currentStep, items
         });
-
-        targetItems.forEach(target => {
-            if (deskItems.some(ui => ui.type === target.type &&
-                Math.abs(ui.x - target.x) < tolerance && Math.abs(ui.y - target.y) < tolerance)) score++;
-        });
-
-        const total = targetItems.length;
-        const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-        const passed = percentage >= 80;
-        setDeskItems(validated);
-        setDeskResult({ score, total, percentage, passed });
+        const { score, total, percentage, passed, validatedItems, ghostItems } = res.data;
+        return { score, total, percentage, passed, validatedItems, ghostItems };
     };
 
-    handleDeskCheckRef.current = handleDeskCheck;
+    const handleDeskResult = (result) => {
+        setCurrentStepResult({ type: 'desk', title: step.title, ...result });
+        setStepDone(true);
+    };
 
-    // ── Game handlers ───────────────────────────────────────
+    // ── Quiz: server-side per-question checking ──
+    const checkQuizAnswer = async (questionIndex, answerIndex) => {
+        const res = await axios.post(`${API_URL}/complex-tests/check-quiz-answer`, {
+            hash, stepIndex: currentStep, questionIndex, answerIndex
+        });
+        return res.data;
+    };
+
+    const handleQuizComplete = (quizResult) => {
+        setCurrentStepResult({ type: 'quiz', title: step.title, ...quizResult });
+        setStepDone(true);
+    };
+
+    // ── Game handlers (inline) ──
     const handleGameChoice = (choice) => {
         if (choice.isWin || choice.result) {
+            const isWin = choice.isWin || false;
             setGameEnding({
-                isWin: choice.isWin || false,
-                text: choice.result || (choice.isWin ? 'Ви виграли!' : 'Спробуйте ще!')
+                isWin,
+                text: choice.result || (isWin ? 'Ви виграли!' : 'Спробуйте ще!')
             });
+            setCurrentStepResult({
+                type: 'game', title: step.title,
+                score: isWin ? 1 : 0, total: 1,
+                percentage: isWin ? 100 : 0, passed: isWin
+            });
+            setStepDone(true);
         } else if (choice.nextNodeId) {
             setCurrentNodeId(choice.nextNodeId);
         }
     };
 
-    // ── Quiz handlers ───────────────────────────────────────
-    const handleQuizAnswer = (qIdx, aIdx) => {
-        if (quizDone || quizRevealed) return;
-        setQuizAnswers(prev => ({ ...prev, [qIdx]: aIdx }));
-        setQuizRevealed(true);
-    };
-
-    const handleQuizNext = () => {
-        setQuizRevealed(false);
-        if (currentQuestion < step.refData.questions.length - 1) {
-            setCurrentQuestion(q => q + 1);
-        } else {
-            handleQuizSubmit();
-        }
-    };
-
-    const handleQuizSubmit = () => {
-        const refData = step?.refData;
-        if (!refData) return;
-        let score = 0;
-        const detailedAnswers = refData.questions.map((q, idx) => {
-            const isCorrect = quizAnswers[idx] === q.correctIndex;
-            if (isCorrect) score++;
-            return {
-                questionText: q.text,
-                givenAnswer: q.options[quizAnswers[idx]] || '—',
-                correctAnswer: q.options[q.correctIndex],
-                explanation: q.explanation,
-                image: q.image,
-                video: q.video,
-                isCorrect
-            };
-        });
-        const total = refData.questions.length;
-        const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-        const passed = percentage >= (refData.passingScore || 80);
-        setQuizResult({ score, total, percentage, passed, answers: detailedAnswers });
-        setQuizDone(true);
-    };
-
-    // ── Next step ───────────────────────────────────────────
-    const getStepResult = () => {
-        if (step.type === 'desk' && deskResult) {
-            return { type: 'desk', title: step.title, ...deskResult };
-        }
-        if (step.type === 'game' && gameEnding) {
-            return { type: 'game', title: step.title, score: gameEnding.isWin ? 1 : 0, total: 1, percentage: gameEnding.isWin ? 100 : 0, passed: gameEnding.isWin };
-        }
-        if (step.type === 'quiz' && quizResult) {
-            return { type: 'quiz', title: step.title, ...quizResult };
-        }
-        return null;
-    };
-
-    const canProceed = () => {
-        if (step.type === 'desk') return !!deskResult;
-        if (step.type === 'game') return !!gameEnding;
-        if (step.type === 'quiz') return !!quizResult;
-        return false;
-    };
-
+    // ── Next step / finish ──
     const handleNext = async () => {
-        const result = getStepResult();
-        const newResults = [...stepResults, result];
+        if (!currentStepResult) return;
+        const newResults = [...stepResults, currentStepResult];
         setStepResults(newResults);
 
         if (currentStep < steps.length - 1) {
@@ -281,6 +146,11 @@ const ComplexTestPlay = () => {
         }
     };
 
+    const nextLabel = currentStep < steps.length - 1 ? 'Далі \u2192' : 'Завершити';
+    const nextButton = (
+        <button className="btn-save-template" onClick={handleNext}>{nextLabel}</button>
+    );
+
     if (loading) return <div className="placeholder-view">Завантаження тесту...</div>;
     if (!testData) return <div className="placeholder-view">Тест не знайдено</div>;
 
@@ -289,7 +159,7 @@ const ComplexTestPlay = () => {
         return (
             <div className="registration-container">
                 <div className="registration-card">
-                    <h2>🧩 {testData.title}</h2>
+                    <h2>{testData.title}</h2>
                     {testData.description && <p>{testData.description}</p>}
                     <p>Кроків: <strong>{steps.length}</strong></p>
                     <form onSubmit={handleRegister}>
@@ -307,22 +177,8 @@ const ComplexTestPlay = () => {
                         </div>
                         <div className="form-group">
                             <label>Місто</label>
-                            <input
-                                type="text"
-                                value={studentInfo.city || '—'}
-                                disabled
-                                style={{
-                                    width: '100%',
-                                    padding: '12px 15px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #333',
-                                    background: '#1a1a1a',
-                                    color: '#fff',
-                                    fontSize: '1rem',
-                                    opacity: 0.7,
-                                    cursor: 'not-allowed'
-                                }}
-                            />
+                            <input type="text" value={studentInfo.city || '—'} disabled
+                                style={{ width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '1rem', opacity: 0.7, cursor: 'not-allowed' }} />
                         </div>
                         <div className="form-group">
                             <label>Посада</label>
@@ -349,7 +205,7 @@ const ComplexTestPlay = () => {
         return (
             <div className="complex-play">
                 <div className="complex-summary">
-                    <h2>📋 Зведений результат</h2>
+                    <h2>Зведений результат</h2>
                     <table className="complex-summary-table">
                         <thead>
                             <tr><th>Крок</th><th>Тип</th><th>Бали</th><th>Статус</th></tr>
@@ -358,7 +214,7 @@ const ComplexTestPlay = () => {
                             {stepResults.map((r, i) => (
                                 <tr key={i} className={r?.passed ? 'row-pass' : 'row-fail'}>
                                     <td>{r?.title || `#${i + 1}`}</td>
-                                    <td>{r?.type === 'desk' ? '🖥️' : r?.type === 'game' ? '🎮' : '📝'}</td>
+                                    <td>{r?.type === 'desk' ? 'Сервірування' : r?.type === 'game' ? 'Гра' : 'Квіз'}</td>
                                     <td>{r?.score}/{r?.total}</td>
                                     <td>{r?.passed ? '✅' : '❌'}</td>
                                 </tr>
@@ -378,7 +234,7 @@ const ComplexTestPlay = () => {
         );
     }
 
-    // Step content
+    // Game data
     const gameData = step?.refData;
     const currentNode = step?.type === 'game' && gameData
         ? gameData.nodes?.find(n => n.nodeId === currentNodeId) : null;
@@ -409,89 +265,16 @@ const ComplexTestPlay = () => {
             <div className="complex-step-content">
                 {/* ── DESK ── */}
                 {step?.type === 'desk' && step.refData && (
-                    <div className={`virtual-desk-container student-test ${deskResult ? 'has-result' : ''}`} style={{ flex: 1 }}>
-                        <header className="desk-header">
-                            <div className="header-info">
-                                <p>На столі: {deskItems.length} предметів</p>
-                            </div>
-                            <div className="header-actions">
-                                {timeLeft !== null && !deskResult && (
-                                    <span className={`test-timer ${timeLeft < 60 ? 'timer-warning' : ''}`}
-                                        style={{ fontSize: '1.4rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                                        ⏱ {formatTime(timeLeft)}
-                                    </span>
-                                )}
-                                {!deskResult && (
-                                    <button className="btn-add" onClick={handleDeskCheck} disabled={deskItems.length === 0}>
-                                        Перевірити
-                                    </button>
-                                )}
-                                {deskResult && (
-                                    <button className="btn-save-template" onClick={handleNext}>
-                                        {currentStep < steps.length - 1 ? 'Далі →' : 'Завершити'}
-                                    </button>
-                                )}
-                            </div>
-                        </header>
-                        <div className="desk-body">
-                            <aside className="desk-panel inventory-panel">
-                                <div className="panel-label">Посуд</div>
-                                <div className="inventory-grid">
-                                    {dishes.map(dish => (
-                                        <div key={dish.id}
-                                            className={`inv-item ${selectedDish?.id === dish.id ? 'active' : ''}`}
-                                            onClick={() => !deskResult && setSelectedDish(dish)}>
-                                            <span className="inv-icon">{dish.icon}</span>
-                                            <span className="inv-name">{dish.name}</span>
-                                        </div>
-                                    ))}
-                                    {dishes.length === 0 && <div className="sidebar-empty">Немає посуду</div>}
-                                </div>
-                            </aside>
-                            <div className="desk-workspace">
-                                <div className="square-desk" onClick={handleDeskClick}>
-                                    {deskResult && step.refData.items.map((target, idx) => (
-                                        <div key={`g-${idx}`} className="desk-item ghost-item"
-                                            style={{ left: `${(target.x / 500) * 100}%`, top: `${(target.y / 500) * 100}%` }}>
-                                            <span className="item-icon">{target.icon}</span>
-                                        </div>
-                                    ))}
-                                    {deskItems.map(item => (
-                                        <div key={item._id}
-                                            className={`desk-item ${deskResult ? (item.isCorrect ? 'correct' : 'incorrect') : ''}`}
-                                            style={{ left: `${(item.x / 500) * 100}%`, top: `${(item.y / 500) * 100}%` }}
-                                            onClick={e => e.stopPropagation()}>
-                                            <span className="item-icon">{item.icon}</span>
-                                            <span className="item-text">{item.name}</span>
-                                            {!deskResult && (
-                                                <button className="item-delete" onClick={() => handleDeleteDeskItem(item._id)}>×</button>
-                                            )}
-                                        </div>
-                                    ))}
-                                    {deskItems.length === 0 && !deskResult && (
-                                        <div className="desk-placeholder">
-                                            <span className="desk-icon">📋</span>
-                                            <span className="desk-label">Розпочніть сервірування</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            {deskResult && (
-                                <aside className="desk-panel results-panel">
-                                    <div className="panel-label">Результат</div>
-                                    <div className="result-card">
-                                        <div className="result-score" style={{ color: deskResult.passed ? '#4ade80' : '#f87171' }}>
-                                            {deskResult.percentage}%
-                                        </div>
-                                        <p>Правильно: {deskResult.score} з {deskResult.total}</p>
-                                        <p className="result-status">
-                                            {deskResult.passed ? '✅ Пройдено!' : '❌ Не пройдено'}
-                                        </p>
-                                    </div>
-                                </aside>
-                            )}
-                        </div>
-                    </div>
+                    <DeskEngine
+                        key={`desk-${currentStep}`}
+                        dishes={dishes}
+                        description={step.refData.description}
+                        timeLimit={step.timeLimit || step.refData?.timeLimit || 0}
+                        onSubmit={handleDeskSubmit}
+                        onResult={handleDeskResult}
+                        embedded
+                        nextButton={nextButton}
+                    />
                 )}
 
                 {/* ── GAME ── */}
@@ -522,9 +305,7 @@ const ComplexTestPlay = () => {
                                 <div className="game-ending">
                                     <h3>{gameEnding.isWin ? '🎉 Перемога!' : '😔 Спробуйте ще'}</h3>
                                     <p>{gameEnding.text}</p>
-                                    <button className="btn-save-template" onClick={handleNext}>
-                                        {currentStep < steps.length - 1 ? 'Далі →' : 'Завершити'}
-                                    </button>
+                                    {nextButton}
                                 </div>
                             </div>
                         ) : (
@@ -538,94 +319,36 @@ const ComplexTestPlay = () => {
                 )}
 
                 {/* ── QUIZ ── */}
-                {step?.type === 'quiz' && step.refData && (
+                {step?.type === 'quiz' && step.refData && !stepDone && (
                     <div className="quiz-embed">
-                        {!quizDone ? (
-                            <>
-                                <div className="quiz-progress-bar">
-                                    <div className="quiz-progress-fill"
-                                        style={{ width: `${((currentQuestion + (quizRevealed ? 1 : 0)) / step.refData.questions.length) * 100}%` }} />
-                                </div>
-                                {(() => {
-                                    const q = step.refData.questions[currentQuestion];
-                                    if (!q) return null;
-                                    const selectedIdx = quizAnswers[currentQuestion];
-                                    const correctIdx = q.correctIndex;
-                                    return (
-                                        <div className="quiz-question-card">
-                                            <div className="quiz-q-number">
-                                                Питання {currentQuestion + 1} з {step.refData.questions.length}
-                                            </div>
-                                            <div className="quiz-q-text">{q.text}</div>
-                                            {q.image && (
-                                                <div className="q-media-container" style={{ marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
-                                                    <img className="quiz-q-image"
-                                                        src={q.image.startsWith('http') ? q.image : `${API_URL.replace('/api', '')}${q.image}`}
-                                                        alt="question"
-                                                        style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
-                                                </div>
-                                            )}
-                                            {q.video && (
-                                                <div className="q-media-container" style={{ marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', aspectRatio: '16/9' }}>
-                                                    <VideoPlayer url={q.video} />
-                                                </div>
-                                            )}
-                                            <div className="quiz-options">
-                                                {q.options.map((opt, oi) => {
-                                                    let cls = 'quiz-option';
-                                                    if (quizRevealed) {
-                                                        if (oi === correctIdx) cls += ' correct';
-                                                        else if (oi === selectedIdx) cls += ' wrong';
-                                                        else cls += ' dimmed';
-                                                    } else if (selectedIdx === oi) {
-                                                        cls += ' selected';
-                                                    }
-                                                    return (
-                                                        <button key={oi} className={cls}
-                                                            onClick={() => handleQuizAnswer(currentQuestion, oi)}
-                                                            style={quizRevealed ? { cursor: 'default' } : {}}>
-                                                            <span>{opt}</span>
-                                                            {quizRevealed && oi === correctIdx && <span style={{ marginLeft: 'auto', fontWeight: 700 }}>✓</span>}
-                                                            {quizRevealed && oi === selectedIdx && oi !== correctIdx && <span style={{ marginLeft: 'auto', fontWeight: 700 }}>✗</span>}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                            {quizRevealed && q.explanation && selectedIdx !== correctIdx && (
-                                                <div style={{ marginTop: '0.75rem', padding: '0.6rem 1rem', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '0.75rem', fontSize: '0.9rem', color: '#e2e8f0' }}>
-                                                    💡 {q.explanation}
-                                                </div>
-                                            )}
-                                            <div className="quiz-nav">
-                                                {quizRevealed && (
-                                                    <button className="btn-save-template" onClick={handleQuizNext}>
-                                                        {currentQuestion < step.refData.questions.length - 1 ? 'Далі →' : 'Завершити квіз'}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-                            </>
-                        ) : (
-                            <div className="quiz-question-card" style={{ textAlign: 'center' }}>
-                                <div className="result-score" style={{ color: quizResult.passed ? '#4ade80' : '#f87171' }}>
-                                    {quizResult.percentage}%
-                                </div>
-                                <p>Правильно: {quizResult.score} з {quizResult.total}</p>
-                                <p style={{ fontWeight: 600, marginBottom: '1.5rem' }}>
-                                    {quizResult.passed ? '✅ Пройдено!' : '❌ Не пройдено'}
-                                </p>
-                                <button className="btn-save-template" onClick={handleNext}>
-                                    {currentStep < steps.length - 1 ? 'Далі →' : 'Завершити'}
-                                </button>
-                            </div>
-                        )}
+                        <QuizEngine
+                            key={`quiz-${currentStep}`}
+                            questions={step.refData.questions}
+                            checkAnswer={checkQuizAnswer}
+                            onComplete={handleQuizComplete}
+                            passingScore={step.refData.passingScore || 80}
+                            timeLimit={step.refData.timeLimit || 0}
+                            title={step.title}
+                            embedded
+                        />
                     </div>
                 )}
 
-                {/* Fallback next button */}
-                {canProceed() && step?.type === 'desk' ? null : null}
+                {/* Quiz result (shown after QuizEngine returns null) */}
+                {step?.type === 'quiz' && stepDone && currentStepResult && (
+                    <div className="quiz-embed">
+                        <div className="quiz-question-card" style={{ textAlign: 'center' }}>
+                            <div className="result-score" style={{ color: currentStepResult.passed ? '#4ade80' : '#f87171' }}>
+                                {currentStepResult.percentage}%
+                            </div>
+                            <p>Правильно: {currentStepResult.score} з {currentStepResult.total}</p>
+                            <p style={{ fontWeight: 600, marginBottom: '1.5rem' }}>
+                                {currentStepResult.passed ? '✅ Пройдено!' : '❌ Не пройдено'}
+                            </p>
+                            {nextButton}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

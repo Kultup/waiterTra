@@ -6,6 +6,7 @@ const QuizResult = require('../models/QuizResult');
 const QuizLink = require('../models/QuizLink');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
+const { syncStudent } = require('../utils/studentSync');
 
 // Admin: Get all quizzes
 router.get('/', auth, async (req, res) => {
@@ -142,7 +143,35 @@ router.get('/hash/:hash', async (req, res) => {
             ip: req.ip || req.headers['x-forwarded-for'] || ''
         }).catch(() => { });
 
+        // Strip correct answers — student must not see them
+        quiz.questions = quiz.questions.map(({ correctIndex, explanation, ...rest }) => rest);
+
         res.json(quiz);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Student: Check single answer (per-question feedback)
+router.post('/check-answer', async (req, res) => {
+    const { hash, questionIndex, answerIndex } = req.body;
+    if (hash == null || questionIndex == null || answerIndex == null) {
+        return res.status(400).json({ error: 'hash, questionIndex, answerIndex required' });
+    }
+    try {
+        const link = await QuizLink.findOne({ hash }).populate('quizId');
+        if (!link) return res.status(404).json({ error: 'Quiz not found' });
+
+        const quiz = link.quizId;
+        const q = quiz.questions[questionIndex];
+        if (!q) return res.status(400).json({ error: 'Invalid questionIndex' });
+
+        const isCorrect = answerIndex === q.correctIndex;
+        res.json({
+            isCorrect,
+            correctIndex: q.correctIndex,
+            explanation: !isCorrect ? (q.explanation || null) : null
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -205,6 +234,9 @@ router.post('/hash/:hash/submit', async (req, res) => {
         });
 
         await result.save();
+
+        // Sync student stats and emit real-time event
+        await syncStudent(studentName, studentLastName, studentCity, req.app.get('io'), result);
 
         // Mark link as used after successful save
         link.isUsed = true;

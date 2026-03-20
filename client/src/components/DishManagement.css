@@ -129,6 +129,47 @@
     padding: 8px !important;
     text-align: center;
     font-size: 1.2rem !important;
+    flex-grow: 1;
+}
+
+.btn-upload-icon,
+.btn-remove-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    transition: all 0.2s;
+}
+
+.btn-upload-icon:hover {
+    background: rgba(56, 189, 248, 0.2);
+    border-color: #38bdf8;
+}
+
+.btn-remove-icon:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+}
+
+.icon-preview-large {
+    margin-top: 15px;
+    width: 100px;
+    height: 100px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 10px;
 }
 
 /* Actions */
@@ -205,12 +246,20 @@
 .dish-icon-preview {
     font-size: 3rem;
     height: 70px;
+    width: 70px;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 12px;
     text-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     transition: transform 0.3s;
+    overflow: hidden;
+}
+
+.dish-icon-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .dish-item-card:hover .dish-icon-preview {

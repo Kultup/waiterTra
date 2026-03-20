@@ -1,0 +1,428 @@
+.student-profile {
+    padding: 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+    animation: fadeIn 0.4s ease-out;
+}
+
+.sp-header {
+    margin-bottom: 1.5rem;
+}
+
+.btn-back {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1rem;
+    transition: color 0.2s;
+}
+
+.btn-back:hover {
+    color: var(--accent-blue);
+}
+
+.sp-info-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.sp-main-info {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.sp-large-avatar {
+    width: 80px;
+    height: 80px;
+    background: linear-gradient(135deg, var(--accent-blue), #6366f1);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 800;
+}
+
+.sp-name-box h2 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.8rem;
+}
+
+.sp-city-badge {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+.sp-stats-grid {
+    display: flex;
+    gap: 2rem;
+}
+
+.sp-stat {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
+}
+
+.sp-stat-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.sp-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.sp-stat-date {
+    font-size: 1.2rem;
+    color: var(--text-main);
+}
+
+.sp-history-section h3 {
+    margin-bottom: 2rem;
+    font-size: 1.5rem;
+}
+
+.sp-timeline {
+    position: relative;
+    padding-left: 3rem;
+}
+
+.sp-timeline::before {
+    content: '';
+    position: absolute;
+    left: 1.5rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+}
+
+.sp-history-item {
+    position: relative;
+    margin-bottom: 2.5rem;
+    display: flex;
+    gap: 2rem;
+}
+
+.sp-item-date {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    width: 60px;
+}
+
+.sp-date-day {
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.sp-date-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.sp-item-dot {
+    position: absolute;
+    left: -1.8rem;
+    top: 0.5rem;
+    width: 12px;
+    height: 12px;
+    background: var(--card-bg);
+    border: 2px solid var(--accent-blue);
+    border-radius: 50%;
+    z-index: 2;
+}
+
+.sp-item-content {
+    flex: 1;
+    background: rgba(255,255,255,0.03);
+    padding: 1.25rem;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    transition: transform 0.2s;
+}
+
+.sp-item-content:hover {
+    transform: translateX(5px);
+    background: rgba(255,255,255,0.05);
+}
+
+.sp-item-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.sp-type-badge {
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    font-weight: 700;
+}
+
+.sp-type-desk { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+.sp-type-game { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+.sp-type-quiz { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+.sp-type-complex { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+
+.sp-template-name {
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.sp-item-result {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.sp-progress-mini {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.sp-progress-fill {
+    height: 100%;
+}
+
+.sp-score-text {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.sp-status-icon {
+    font-size: 1.2rem;
+}
+
+.sp-status-icon.success { color: #4ade80; }
+.sp-status-icon.fail { color: #f87171; }
+
+.sp-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 50vh;
+}
+
+.sp-empty {
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+@media (max-width: 600px) {
+    .sp-info-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2rem;
+    }
+    .sp-stats-grid {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+.sp-item-content.clickable {
+    cursor: pointer;
+}
+
+.sp-item-content.clickable:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.sp-item-footer {
+    margin-top: 0.75rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.sp-view-detail {
+    font-size: 0.8rem;
+    color: var(--accent-blue);
+    font-weight: 600;
+}
+
+/* Modal Styles */
+.sp-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+    animation: fadeIn 0.2s ease-out;
+}
+
+.sp-modal {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.sp-modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sp-modal-title {
+    font-weight: 700;
+    font-size: 1.2rem;
+}
+
+.sp-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.sp-modal-body {
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+.sp-detail-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.sp-meta-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.sp-meta-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sp-meta-value {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.sp-score-block {
+    text-align: center;
+    padding: 2rem;
+    border-radius: 16px;
+    margin-bottom: 2rem;
+}
+
+.sp-score-block.pass { background: rgba(74, 222, 128, 0.1); border: 1px solid #4ade80; }
+.sp-score-block.fail { background: rgba(248, 113, 113, 0.1); border: 1px solid #f87171; }
+
+.sp-score-big { font-size: 3rem; font-weight: 800; }
+.sp-pill { padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+.sp-pill.pass { background: #4ade80; color: #064e3b; }
+.sp-pill.fail { background: #f87171; color: #7f1d1d; }
+
+.sp-section-label {
+    margin: 2rem 0 1rem;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+}
+
+.sp-answer {
+    padding: 1.5rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+}
+
+.sp-answer.correct { border-left: 4px solid #4ade80; }
+.sp-answer.wrong { border-left: 4px solid #f87171; }
+
+.sp-answer-img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+.sp-answer-badge {
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.sp-answer-badge.correct { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
+.sp-answer-badge.wrong { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+
+.sp-answer-correction {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(74, 222, 128, 0.05);
+    border-radius: 8px;
+}
+
+.sp-answer-correct {
+    display: block;
+    color: #4ade80;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.sp-path-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.sp-path-step {
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+}
+
+.sp-step-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 1rem;
+    background: rgba(255,255,255,0.03);
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+}
+
+.sp-step-row.pass { border-right: 4px solid #4ade80; }
+.sp-step-row.fail { border-right: 4px solid #f87171; }
+
+@media (max-width: 600px) {
+    .sp-modal { width: 100%; height: 100%; max-height: 100%; border-radius: 0; }
+}

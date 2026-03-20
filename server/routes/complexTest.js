@@ -7,6 +7,7 @@ const GameScenario = require('../models/GameScenario');
 const Quiz = require('../models/Quiz');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
+const { syncStudent } = require('../utils/studentSync');
 
 const crypto = require('crypto');
 const ComplexTestLink = require('../models/ComplexTestLink');
@@ -136,11 +137,23 @@ router.get('/hash/:hash', async (req, res) => {
             const stepObj = step.toObject ? step.toObject() : { ...step };
             try {
                 if (step.type === 'desk') {
-                    stepObj.refData = await DeskTemplate.findById(step.refId);
+                    const tmpl = await DeskTemplate.findById(step.refId);
+                    if (tmpl) {
+                        // Strip target item positions — student must not see correct layout
+                        const t = tmpl.toObject();
+                        delete t.items;
+                        stepObj.refData = t;
+                    }
                 } else if (step.type === 'game') {
                     stepObj.refData = await GameScenario.findById(step.refId);
                 } else if (step.type === 'quiz') {
-                    stepObj.refData = await Quiz.findById(step.refId);
+                    const quiz = await Quiz.findById(step.refId);
+                    if (quiz) {
+                        const q = quiz.toObject();
+                        // Strip correct answers
+                        q.questions = q.questions.map(({ correctIndex, explanation, ...rest }) => rest);
+                        stepObj.refData = q;
+                    }
                 }
             } catch (e) {
                 stepObj.refData = null;
@@ -167,6 +180,87 @@ router.get('/hash/:hash', async (req, res) => {
             steps: populatedSteps,
             city
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Check single quiz answer within a complex test step
+router.post('/check-quiz-answer', async (req, res) => {
+    const { hash, stepIndex, questionIndex, answerIndex } = req.body;
+    if (hash == null || stepIndex == null || questionIndex == null || answerIndex == null) {
+        return res.status(400).json({ error: 'hash, stepIndex, questionIndex, answerIndex required' });
+    }
+    try {
+        const link = await ComplexTestLink.findOne({ hash }).populate('complexTestId');
+        if (!link) return res.status(404).json({ error: 'Тест не знайдено' });
+
+        const step = link.complexTestId.steps[stepIndex];
+        if (!step || step.type !== 'quiz') return res.status(400).json({ error: 'Invalid step' });
+
+        const quiz = await Quiz.findById(step.refId);
+        if (!quiz) return res.status(404).json({ error: 'Quiz not found' });
+
+        const q = quiz.questions[questionIndex];
+        if (!q) return res.status(400).json({ error: 'Invalid questionIndex' });
+
+        const isCorrect = answerIndex === q.correctIndex;
+        res.json({
+            isCorrect,
+            correctIndex: q.correctIndex,
+            explanation: !isCorrect ? (q.explanation || null) : null
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Check desk step — server-side scoring for complex test
+router.post('/check-desk-step', async (req, res) => {
+    const { hash, stepIndex, items } = req.body;
+    if (hash == null || stepIndex == null || !Array.isArray(items)) {
+        return res.status(400).json({ error: 'hash, stepIndex, items required' });
+    }
+    try {
+        const link = await ComplexTestLink.findOne({ hash }).populate('complexTestId');
+        if (!link) return res.status(404).json({ error: 'Тест не знайдено' });
+
+        const step = link.complexTestId.steps[stepIndex];
+        if (!step || step.type !== 'desk') return res.status(400).json({ error: 'Invalid step' });
+
+        const template = await DeskTemplate.findById(step.refId);
+        if (!template) return res.status(404).json({ error: 'Template not found' });
+
+        const targetItems = template.items;
+        const tolerance = 50;
+        let score = 0;
+
+        const validatedItems = items.map(userItem => {
+            const correctMatch = targetItems.find(target =>
+                userItem.type === target.type &&
+                Math.abs(userItem.x - target.x) < tolerance &&
+                Math.abs(userItem.y - target.y) < tolerance
+            );
+            return { ...userItem, isCorrect: !!correctMatch };
+        });
+
+        targetItems.forEach(target => {
+            const found = items.some(userItem =>
+                userItem.type === target.type &&
+                Math.abs(userItem.x - target.x) < tolerance &&
+                Math.abs(userItem.y - target.y) < tolerance
+            );
+            if (found) score++;
+        });
+
+        const total = targetItems.length;
+        const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
+        const passed = percentage >= 80;
+
+        // Return ghost items (correct positions) for overlay
+        const ghostItems = targetItems.map(i => ({ type: i.type, name: i.name, icon: i.icon, x: i.x, y: i.y }));
+
+        res.json({ score, total, percentage, passed, validatedItems, ghostItems });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -205,6 +299,9 @@ router.post('/hash/:hash/submit', async (req, res) => {
             overallPassed
         });
         await result.save();
+
+        // Sync student stats and emit real-time event
+        await syncStudent(result.studentName, result.studentLastName, result.studentCity, req.app.get('io'), result);
         res.status(201).json(result);
     } catch (err) {
         res.status(400).json({ error: err.message });

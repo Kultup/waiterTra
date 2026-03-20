@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import './VirtualDesk.css';
 import './MultiDeskTest.css';
 import API_URL from '../api';
-
-// Removed hardcoded dishList. Fetching dynamically now.
+import DeskEngine from './DeskEngine';
 
 const MultiDeskTest = () => {
     const { hash } = useParams();
@@ -13,23 +12,15 @@ const MultiDeskTest = () => {
     const [testData, setTestData] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // Registration
     const [isRegistered, setIsRegistered] = useState(false);
     const [studentInfo, setStudentInfo] = useState({ firstName: '', lastName: '', city: '', position: '' });
 
-    // Step state
     const [currentStep, setCurrentStep] = useState(0);
-    const [items, setItems] = useState([]);
     const [dishes, setDishes] = useState([]);
-    const [selectedDish, setSelectedDish] = useState(null);
     const [stepResults, setStepResults] = useState([]);
-    const [stepResult, setStepResult] = useState(null);
+    const [stepDone, setStepDone] = useState(false);
+    const [currentStepResult, setCurrentStepResult] = useState(null);
 
-    // Timer
-    const [timeLeft, setTimeLeft] = useState(null);
-    const handleCheckRef = useRef(null);
-
-    // Summary
     const [showSummary, setShowSummary] = useState(false);
     const [serverResults, setServerResults] = useState(null);
 
@@ -44,18 +35,10 @@ const MultiDeskTest = () => {
                 if (testRes.data.city) {
                     setStudentInfo(prev => ({ ...prev, city: testRes.data.city }));
                 }
-
-                const mappedDishes = dishesRes.data.map(d => ({
-                    ...d,
-                    id: d._id
-                }));
-                setDishes(mappedDishes);
-                if (mappedDishes.length > 0) setSelectedDish(mappedDishes[0]);
+                setDishes(dishesRes.data.map(d => ({ ...d, id: d._id })));
             } catch (err) {
                 console.error('Error fetching multi-test data:', err);
-                if (err.response?.status === 410) {
-                    navigate('/inactive');
-                }
+                if (err.response?.status === 410) navigate('/inactive');
             } finally {
                 setLoading(false);
             }
@@ -66,27 +49,10 @@ const MultiDeskTest = () => {
     const templates = testData?.templateIds || [];
     const currentTemplate = templates[currentStep];
 
-    // Timer logic
     useEffect(() => {
-        if (isRegistered && currentTemplate?.timeLimit > 0 && !stepResult) {
-            setTimeLeft(currentTemplate.timeLimit * 60);
-        } else if (!currentTemplate?.timeLimit) {
-            setTimeLeft(null);
-        }
-    }, [isRegistered, currentStep, currentTemplate, stepResult]);
-
-    useEffect(() => {
-        if (timeLeft === null || stepResult) return;
-        if (timeLeft === 0) { handleCheckRef.current(); return; }
-        const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-        return () => clearInterval(timer);
-    }, [timeLeft, stepResult]);
-
-    const formatTime = (seconds) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
+        setStepDone(false);
+        setCurrentStepResult(null);
+    }, [currentStep]);
 
     const handleRegister = (e) => {
         e.preventDefault();
@@ -97,75 +63,34 @@ const MultiDeskTest = () => {
         }
     };
 
-    const handleDeskClick = (e) => {
-        if (stepResult) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width * 500;
-        const y = (e.clientY - rect.top) / rect.height * 500;
-        const newItem = {
-            _id: Date.now().toString(),
-            name: selectedDish.name, icon: selectedDish.icon,
-            x, y, type: selectedDish.id
-        };
-        setItems(prev => [...prev, newItem]);
-    };
-
-    const handleDeleteItem = (id) => {
-        if (stepResult) return;
-        setItems(prev => prev.filter(i => i._id !== id));
-    };
-
-    const handleCheckResult = () => {
-        if (!currentTemplate) return;
-        const tolerance = 50;
-        const targetItems = currentTemplate.items;
-        let score = 0;
-
-        const validatedItems = items.map(userItem => {
-            const match = targetItems.find(t =>
-                userItem.type === t.type &&
-                Math.abs(userItem.x - t.x) < tolerance &&
-                Math.abs(userItem.y - t.y) < tolerance
-            );
-            return { ...userItem, isCorrect: !!match };
+    const handleDeskSubmit = async (items) => {
+        const res = await axios.post(`${API_URL}/tests/multi/${hash}/check-step`, {
+            stepIndex: currentStep, items
         });
-
-        targetItems.forEach(target => {
-            const found = items.some(ui =>
-                ui.type === target.type &&
-                Math.abs(ui.x - target.x) < tolerance &&
-                Math.abs(ui.y - target.y) < tolerance
-            );
-            if (found) score++;
-        });
-
-        const total = targetItems.length;
-        const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-        const passed = percentage >= 80;
-
-        setItems(validatedItems);
-        const result = { score, total, percentage, passed };
-        setStepResult(result);
-        setStepResults(prev => [...prev, { ...result, items: items.map(({ type, x, y }) => ({ type, x, y })) }]);
+        const { score, total, percentage, passed, validatedItems, ghostItems } = res.data;
+        return { score, total, percentage, passed, validatedItems, ghostItems: ghostItems || [] };
     };
 
-    handleCheckRef.current = handleCheckResult;
+    const handleDeskResult = (result) => {
+        setCurrentStepResult(result);
+        setStepDone(true);
+    };
 
     const handleNext = async () => {
+        if (!currentStepResult) return;
+        const newResults = [...stepResults, currentStepResult];
+        setStepResults(newResults);
+
         if (currentStep < templates.length - 1) {
             setCurrentStep(prev => prev + 1);
-            setItems([]);
-            setStepResult(null);
-            if (dishes.length > 0) setSelectedDish(dishes[0]);
         } else {
-            // All done — submit to server
             try {
                 const res = await axios.post(`${API_URL}/tests/multi/${hash}/submit`, {
                     studentName: studentInfo.firstName,
                     studentLastName: studentInfo.lastName,
                     studentCity: studentInfo.city,
                     studentPosition: studentInfo.position,
-                    results: stepResults.map(r => ({ items: r.items }))
+                    results: newResults.map(r => ({ items: [] }))
                 });
                 setServerResults(res.data.stepResults);
             } catch (e) {
@@ -175,10 +100,14 @@ const MultiDeskTest = () => {
         }
     };
 
+    const nextLabel = currentStep < templates.length - 1 ? 'Далі \u2192' : 'Завершити';
+    const nextButton = (
+        <button className="btn-save-template" onClick={handleNext}>{nextLabel}</button>
+    );
+
     if (loading) return <div className="placeholder-view">Завантаження тесту...</div>;
     if (!testData) return <div className="placeholder-view">Тест не знайдено</div>;
 
-    // Registration screen
     if (!isRegistered) {
         return (
             <div className="registration-container">
@@ -200,32 +129,14 @@ const MultiDeskTest = () => {
                         </div>
                         <div className="form-group">
                             <label>Місто</label>
-                            <input
-                                type="text"
-                                value={studentInfo.city || '—'}
-                                disabled
-                                style={{
-                                    width: '100%',
-                                    padding: '12px 15px',
-                                    borderRadius: '8px',
-                                    border: '1px solid #333',
-                                    background: '#1a1a1a',
-                                    color: '#fff',
-                                    fontSize: '1rem',
-                                    opacity: 0.7,
-                                    cursor: 'not-allowed'
-                                }}
-                            />
+                            <input type="text" value={studentInfo.city || '—'} disabled
+                                style={{ width: '100%', padding: '12px 15px', borderRadius: '8px', border: '1px solid #333', background: '#1a1a1a', color: '#fff', fontSize: '1rem', opacity: 0.7, cursor: 'not-allowed' }} />
                         </div>
                         <div className="form-group">
                             <label>Посада</label>
-                            <input
-                                type="text"
-                                value={studentInfo.position}
+                            <input type="text" value={studentInfo.position}
                                 onChange={e => setStudentInfo({ ...studentInfo, position: e.target.value })}
-                                placeholder="Введіть посаду"
-                                required
-                            />
+                                placeholder="Введіть посаду" required />
                         </div>
                         <button type="submit" className="btn-save-template" style={{ width: '100%', marginTop: '1rem' }}>
                             Почати тест
@@ -236,29 +147,28 @@ const MultiDeskTest = () => {
         );
     }
 
-    // Summary screen
     if (showSummary) {
         const results = serverResults || stepResults;
-        const totalScore = results.reduce((s, r) => s + r.score, 0);
-        const totalMax = results.reduce((s, r) => s + r.total, 0);
+        const totalScore = results.reduce((s, r) => s + (r?.score || 0), 0);
+        const totalMax = results.reduce((s, r) => s + (r?.total || 0), 0);
         const overallPercent = totalMax > 0 ? Math.round((totalScore / totalMax) * 100) : 0;
-        const allPassed = results.every(r => r.passed);
+        const allPassed = results.every(r => r?.passed);
 
         return (
             <div className="multi-desk-container">
                 <div className="multi-summary">
-                    <h2>📋 Зведений результат</h2>
+                    <h2>Зведений результат</h2>
                     <table className="summary-table">
                         <thead>
                             <tr><th>Сервіровка</th><th>Бали</th><th>%</th><th>Статус</th></tr>
                         </thead>
                         <tbody>
                             {results.map((r, i) => (
-                                <tr key={i} className={r.passed ? 'passed-row' : 'failed-row'}>
-                                    <td>{r.templateName || templates[i]?.name || `#${i + 1}`}</td>
-                                    <td>{r.score}/{r.total}</td>
-                                    <td>{r.percentage}%</td>
-                                    <td>{r.passed ? '✅' : '❌'}</td>
+                                <tr key={i} className={r?.passed ? 'passed-row' : 'failed-row'}>
+                                    <td>{r?.templateName || templates[i]?.name || `#${i + 1}`}</td>
+                                    <td>{r?.score}/{r?.total}</td>
+                                    <td>{r?.percentage}%</td>
+                                    <td>{r?.passed ? '✅' : '❌'}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -276,10 +186,8 @@ const MultiDeskTest = () => {
         );
     }
 
-    // Test step
     return (
         <div className="multi-desk-container">
-            {/* Stepper */}
             <div className="stepper">
                 {templates.map((t, i) => (
                     <div key={i} className="stepper-step">
@@ -294,96 +202,20 @@ const MultiDeskTest = () => {
             </div>
 
             <div className="step-header">
-                <h2>🍽️ {currentTemplate?.name}</h2>
+                <h2>{currentTemplate?.name}</h2>
                 <p>{studentInfo.firstName} {studentInfo.lastName} · Крок {currentStep + 1} з {templates.length}</p>
             </div>
 
-            <div className={`virtual-desk-container student-test ${stepResult ? 'has-result' : ''}`} style={{ flex: 1 }}>
-                <header className="desk-header">
-                    <div className="header-info">
-                        <p>На столі: {items.length} предметів</p>
-                    </div>
-                    <div className="header-actions">
-                        {timeLeft !== null && !stepResult && (
-                            <span className={`test-timer ${timeLeft < 60 ? 'timer-warning' : ''}`}
-                                style={{ fontSize: '1.4rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                                ⏱ {formatTime(timeLeft)}
-                            </span>
-                        )}
-                        {!stepResult && (
-                            <button className="btn-add" onClick={handleCheckResult} disabled={items.length === 0}>
-                                Перевірити
-                            </button>
-                        )}
-                        {stepResult && (
-                            <button className="btn-save-template" onClick={handleNext}>
-                                {currentStep < templates.length - 1 ? 'Далі →' : 'Завершити'}
-                            </button>
-                        )}
-                    </div>
-                </header>
-
-                <div className="desk-body">
-                    <aside className="desk-panel inventory-panel">
-                        <div className="panel-label">Посуд</div>
-                        <div className="inventory-grid">
-                            {dishes.map(dish => (
-                                <div key={dish.id}
-                                    className={`inv-item ${selectedDish?.id === dish.id ? 'active' : ''}`}
-                                    onClick={() => !stepResult && setSelectedDish(dish)}>
-                                    <span className="inv-icon">{dish.icon}</span>
-                                    <span className="inv-name">{dish.name}</span>
-                                </div>
-                            ))}
-                            {dishes.length === 0 && <div className="sidebar-empty">Немає посуду</div>}
-                        </div>
-                    </aside>
-
-                    <div className="desk-workspace">
-                        <div className="square-desk" onClick={handleDeskClick}>
-                            {stepResult && currentTemplate.items.map((target, idx) => (
-                                <div key={`ghost-${idx}`} className="desk-item ghost-item"
-                                    style={{ left: `${(target.x / 500) * 100}%`, top: `${(target.y / 500) * 100}%` }}>
-                                    <span className="item-icon">{target.icon}</span>
-                                </div>
-                            ))}
-                            {items.map(item => (
-                                <div key={item._id}
-                                    className={`desk-item ${stepResult ? (item.isCorrect ? 'correct' : 'incorrect') : ''}`}
-                                    style={{ left: `${(item.x / 500) * 100}%`, top: `${(item.y / 500) * 100}%` }}
-                                    onClick={e => e.stopPropagation()}>
-                                    <span className="item-icon">{item.icon}</span>
-                                    <span className="item-text">{item.name}</span>
-                                    {!stepResult && (
-                                        <button className="item-delete" onClick={() => handleDeleteItem(item._id)}>×</button>
-                                    )}
-                                </div>
-                            ))}
-                            {items.length === 0 && !stepResult && (
-                                <div className="desk-placeholder">
-                                    <span className="desk-icon">📋</span>
-                                    <span className="desk-label">Розпочніть сервірування</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {stepResult && (
-                        <aside className="desk-panel results-panel">
-                            <div className="panel-label">Результат</div>
-                            <div className="result-card">
-                                <div className="result-score" style={{ color: stepResult.passed ? '#4ade80' : '#f87171' }}>
-                                    {stepResult.percentage}%
-                                </div>
-                                <p>Правильно: {stepResult.score} з {stepResult.total}</p>
-                                <p className="result-status">
-                                    {stepResult.passed ? '✅ Пройдено!' : '❌ Не пройдено'}
-                                </p>
-                            </div>
-                        </aside>
-                    )}
-                </div>
-            </div>
+            <DeskEngine
+                key={`desk-${currentStep}`}
+                dishes={dishes}
+                description={currentTemplate?.description}
+                timeLimit={currentTemplate?.timeLimit || 0}
+                onSubmit={handleDeskSubmit}
+                onResult={handleDeskResult}
+                embedded
+                nextButton={nextButton}
+            />
         </div>
     );
 };

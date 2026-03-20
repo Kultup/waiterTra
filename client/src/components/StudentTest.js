@@ -1,32 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import './VirtualDesk.css';
 import API_URL from '../api';
-
-// Removed hardcoded dishList. Fetching dynamically now.
+import DeskEngine from './DeskEngine';
 
 const StudentTest = () => {
     const { hash } = useParams();
     const navigate = useNavigate();
     const [testData, setTestData] = useState(null);
-    const [items, setItems] = useState([]);
     const [dishes, setDishes] = useState([]);
-    const [selectedDish, setSelectedDish] = useState(null);
-    const [testResult, setTestResult] = useState(null);
     const [loading, setLoading] = useState(true);
 
     // Registration State
     const [isRegistered, setIsRegistered] = useState(false);
     const [studentInfo, setStudentInfo] = useState({
-        firstName: '',
-        lastName: '',
-        city: '',
-        position: ''
+        firstName: '', lastName: '', city: '', position: ''
     });
-
-    const [timeLeft, setTimeLeft] = useState(null);
-    const handleCheckResultRef = useRef(null);
+    const [testResult, setTestResult] = useState(null);
 
     const [availableCities, setAvailableCities] = useState([]);
 
@@ -38,13 +29,8 @@ const StudentTest = () => {
                     axios.get(`${API_URL}/dishes`)
                 ]);
                 setAvailableCities(citiesRes.data);
-                
-                const mappedDishes = dishesRes.data.map(d => ({
-                    ...d,
-                    id: d._id // Map _id to id for compatibility
-                }));
+                const mappedDishes = dishesRes.data.map(d => ({ ...d, id: d._id }));
                 setDishes(mappedDishes);
-                if (mappedDishes.length > 0) setSelectedDish(mappedDishes[0]);
             } catch (error) {
                 console.error('Error fetching initial data:', error);
             }
@@ -62,44 +48,13 @@ const StudentTest = () => {
                 }
             } catch (error) {
                 console.error('Error fetching test:', error);
-                if (error.response?.status === 410) {
-                    navigate('/inactive');
-                }
+                if (error.response?.status === 410) navigate('/inactive');
             } finally {
                 setLoading(false);
             }
         };
         fetchTest();
     }, [hash, navigate]);
-
-
-    // Timer logic
-    useEffect(() => {
-        if (isRegistered && testData?.templateId?.timeLimit > 0 && !testResult) {
-            setTimeLeft(testData.templateId.timeLimit * 60);
-        }
-    }, [isRegistered, testData, testResult]);
-
-    useEffect(() => {
-        if (timeLeft === null || testResult) return;
-
-        if (timeLeft === 0) {
-            handleCheckResultRef.current();
-            return;
-        }
-
-        const timer = setInterval(() => {
-            setTimeLeft(prev => prev - 1);
-        }, 1000);
-
-        return () => clearInterval(timer);
-    }, [timeLeft, testResult]);
-
-    const formatTime = (seconds) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
 
     const handleRegister = (e) => {
         e.preventDefault();
@@ -110,61 +65,22 @@ const StudentTest = () => {
         }
     };
 
-    const handleDeskClick = (e) => {
-        if (testResult) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const visualX = e.clientX - rect.left;
-        const visualY = e.clientY - rect.top;
-
-        // Normalize to logical 500x500 space
-        const x = (visualX / rect.width) * 500;
-        const y = (visualY / rect.height) * 500;
-
-        const newItem = {
-            _id: Date.now().toString(),
-            name: selectedDish.name,
-            icon: selectedDish.icon,
-            x,
-            y,
-            type: selectedDish.id
-        };
-        setItems([...items, newItem]);
-    };
-
-    const handleDeleteItem = (id) => {
-        if (testResult) return;
-        setItems(items.filter(item => item._id !== id));
-    };
-
-    const handleCheckResult = async () => {
+    const handleDeskSubmit = async (items) => {
         const payload = {
-            items: items.map(({ type, x, y }) => ({ type, x, y })),
+            items,
             studentName: studentInfo.firstName,
             studentLastName: studentInfo.lastName,
             studentCity: studentInfo.city,
             studentPosition: studentInfo.position,
         };
-
-        try {
-            const response = await axios.post(`${API_URL}/tests/${hash}/submit`, payload);
-            const { score, total, percentage, passed, validatedItems } = response.data;
-
-            const mergedItems = items.map((item, idx) => ({
-                ...item,
-                isCorrect: validatedItems[idx]?.isCorrect ?? false,
-            }));
-
-            setItems(mergedItems);
-            setTestResult({ score, total, percentage, passed });
-        } catch (error) {
-            console.error('Error submitting test:', error);
-            alert('Помилка при відправці результату');
-        }
+        const response = await axios.post(`${API_URL}/tests/${hash}/submit`, payload);
+        const { score, total, percentage, passed, validatedItems, ghostItems } = response.data;
+        return { score, total, percentage, passed, validatedItems, ghostItems: ghostItems || [] };
     };
 
-    // Always keep the ref pointing to the latest version of handleCheckResult
-    // so the timer effect never captures a stale closure
-    handleCheckResultRef.current = handleCheckResult;
+    const handleDeskResult = (result) => {
+        setTestResult(result);
+    };
 
     if (loading) return <div className="placeholder-view">Завантаження тесту...</div>;
     if (!testData) return <div className="placeholder-view">Тест не знайдено</div>;
@@ -183,40 +99,24 @@ const StudentTest = () => {
                     <form onSubmit={handleRegister}>
                         <div className="form-group">
                             <label>Ім'я</label>
-                            <input
-                                type="text"
-                                value={studentInfo.firstName}
+                            <input type="text" value={studentInfo.firstName}
                                 onChange={(e) => setStudentInfo({ ...studentInfo, firstName: e.target.value })}
-                                placeholder="Введіть ім'я"
-                                required
-                            />
+                                placeholder="Введіть ім'я" required />
                         </div>
                         <div className="form-group">
                             <label>Прізвище</label>
-                            <input
-                                type="text"
-                                value={studentInfo.lastName}
+                            <input type="text" value={studentInfo.lastName}
                                 onChange={(e) => setStudentInfo({ ...studentInfo, lastName: e.target.value })}
-                                placeholder="Введіть прізвище"
-                                required
-                            />
+                                placeholder="Введіть прізвище" required />
                         </div>
                         <div className="form-group">
                             <label>Місто</label>
                             {testData.city ? (
-                                <input
-                                    type="text"
-                                    value={studentInfo.city}
-                                    disabled
-                                    className="form-control-disabled"
-                                />
+                                <input type="text" value={studentInfo.city} disabled className="form-control-disabled" />
                             ) : (
-                                <select
-                                    value={studentInfo.city}
+                                <select value={studentInfo.city}
                                     onChange={(e) => setStudentInfo({ ...studentInfo, city: e.target.value })}
-                                    required
-                                    className="form-control"
-                                >
+                                    required className="form-control">
                                     <option value="">Оберіть місто...</option>
                                     {availableCities.map(city => (
                                         <option key={city._id} value={city.name}>{city.name}</option>
@@ -226,13 +126,9 @@ const StudentTest = () => {
                         </div>
                         <div className="form-group">
                             <label>Посада</label>
-                            <input
-                                type="text"
-                                value={studentInfo.position}
+                            <input type="text" value={studentInfo.position}
                                 onChange={(e) => setStudentInfo({ ...studentInfo, position: e.target.value })}
-                                placeholder="Введіть посаду"
-                                required
-                            />
+                                placeholder="Введіть посаду" required />
                         </div>
                         <button type="submit" className="btn-save-template" style={{ width: '100%', marginTop: '1rem' }}>
                             Почати тест
@@ -244,106 +140,23 @@ const StudentTest = () => {
     }
 
     return (
-        <div className={`virtual-desk-container student-test ${testResult ? 'has-result' : ''}`}>
-            <header className="desk-header">
-                <div className="header-info">
-                    <h1>🍽️ {testData.templateId.name}</h1>
-                    <p>{studentInfo.firstName} {studentInfo.lastName} · {studentInfo.city} ({studentInfo.position})</p>
-                    {(testData.description || testData.templateId?.description) && (
-                        <div style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '10px', padding: '0.6rem 1rem', marginTop: '0.4rem', fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.4 }}>
-                            📋 {testData.description || testData.templateId.description}
-                        </div>
-                    )}
-                </div>
-                <div className="header-actions">
-                    {timeLeft !== null && !testResult && (
-                        <span className={`test-timer ${timeLeft < 60 ? 'timer-warning' : ''}`}
-                            style={{ fontSize: '1.4rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                            ⏱ {formatTime(timeLeft)}
-                        </span>
-                    )}
-                    {!testResult && (
-                        <button className="btn-add" onClick={handleCheckResult} disabled={items.length === 0}>
-                            Перевірити результат
-                        </button>
-                    )}
-                </div>
-            </header>
-
-            <div className="desk-body">
-                <aside className="desk-panel inventory-panel">
-                    <div className="panel-label">Посуд</div>
-                    <div className="inventory-grid">
-                        {dishes.map(dish => (
-                            <div
-                                key={dish.id}
-                                className={`inv-item ${selectedDish?.id === dish.id ? 'active' : ''}`}
-                                onClick={() => !testResult && setSelectedDish(dish)}
-                            >
-                                <span className="inv-icon">{dish.icon}</span>
-                                <span className="inv-name">{dish.name}</span>
-                            </div>
-                        ))}
-                        {dishes.length === 0 && <div className="sidebar-empty">Немає посуду</div>}
-                    </div>
-                </aside>
-
-                <div className="desk-workspace">
-                    <div className="square-desk" onClick={handleDeskClick}>
-                        {testResult && testData.templateId.items.map((target, idx) => (
-                            <div
-                                key={`ghost-${idx}`}
-                                className="desk-item ghost-item"
-                                style={{
-                                    left: `${(target.x / 500) * 100}%`,
-                                    top: `${(target.y / 500) * 100}%`
-                                }}
-                            >
-                                <span className="item-icon">{target.icon}</span>
-                            </div>
-                        ))}
-                        {items.map((item) => (
-                            <div
-                                key={item._id}
-                                className={`desk-item ${testResult ? (item.isCorrect ? 'correct' : 'incorrect') : ''}`}
-                                style={{
-                                    left: `${(item.x / 500) * 100}%`,
-                                    top: `${(item.y / 500) * 100}%`
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <span className="item-icon">{item.icon}</span>
-                                <span className="item-text">{item.name}</span>
-                                {!testResult && (
-                                    <button className="item-delete" onClick={() => handleDeleteItem(item._id)}>×</button>
-                                )}
-                            </div>
-                        ))}
-                        {items.length === 0 && !testResult && (
-                            <div className="desk-placeholder">
-                                <span className="desk-icon">📋</span>
-                                <span className="desk-label">Розпочніть сервірування</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {testResult && (
-                    <aside className="desk-panel results-panel">
-                        <div className="panel-label">Результат</div>
-                        <div className="result-card">
-                            <div className="result-score" style={{ color: testResult.passed ? '#4ade80' : '#f87171' }}>
-                                {testResult.percentage}%
-                            </div>
-                            <p>Правильно: {testResult.score} з {testResult.total}</p>
-                            <p className="result-status">
-                                {testResult.passed ? '✅ Тест пройдено!' : '❌ Спробуйте ще раз'}
-                            </p>
-                            <p className="result-hint">Адміністратор отримав ваші результати</p>
-                        </div>
-                    </aside>
-                )}
+        <div>
+            <div style={{ textAlign: 'center', padding: '0.5rem' }}>
+                <h1>🍽️ {testData.templateId.name}</h1>
+                <p>{studentInfo.firstName} {studentInfo.lastName} · {studentInfo.city} ({studentInfo.position})</p>
             </div>
+            <DeskEngine
+                dishes={dishes}
+                description={testData.description || testData.templateId?.description}
+                timeLimit={testData.templateId?.timeLimit || 0}
+                onSubmit={handleDeskSubmit}
+                onResult={handleDeskResult}
+            />
+            {testResult && (
+                <div style={{ textAlign: 'center', padding: '1rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                    Адміністратор отримав ваші результати
+                </div>
+            )}
         </div>
     );
 };

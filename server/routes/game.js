@@ -5,6 +5,7 @@ const GameLink = require('../models/GameLink');
 const GameResult = require('../models/GameResult');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
+const { syncStudent } = require('../utils/studentSync');
 
 // ── /api/game-scenarios ───────────────────────────────────────────────────────
 
@@ -225,6 +226,9 @@ resultsRouter.post('/', async (req, res) => {
       choicePath: req.body.choicePath || []
     });
     await result.save();
+
+    // Sync student stats and emit real-time event
+    await syncStudent(result.studentName, result.studentLastName, result.city, req.app.get('io'), result);
 
     console.log('Result saved successfully, hash:', hash);
 

@@ -2,7 +2,10 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+const sharp = require('sharp');
 const { auth } = require('../middleware/authMiddleware');
+const logger = require('../utils/logger');
 
 // Uploads directory (created in index.js)
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -35,24 +38,56 @@ const upload = multer({
 });
 
 // Upload endpoint
-router.post('/', auth, upload.single('file'), (req, res) => {
-    console.log('Upload request:', {
-        file: req.file ? {
-            filename: req.file.filename,
-            size: req.file.size,
-            mimetype: req.file.mimetype,
-            path: req.file.path
-        } : null,
-        user: req.user
-    });
-    
+router.post('/', auth, upload.single('file'), async (req, res) => {
     if (!req.file) {
-        console.error('No file in request');
         return res.status(400).json({ error: 'No file uploaded' });
     }
+
+    const filePath = req.file.path;
     const fileUrl = `/uploads/${req.file.filename}`;
-    console.log('File uploaded:', fileUrl);
-    res.json({ url: fileUrl });
+
+    try {
+        // If it's an image, optimize it
+        if (req.file.mimetype.startsWith('image/')) {
+            const tempPath = filePath + '_tmp';
+            
+            await sharp(filePath)
+                .resize({
+                    width: 1200,
+                    height: 1200,
+                    fit: 'inside',
+                    withoutEnlargement: true
+                })
+                .toFormat('webp', { quality: 80 })
+                .toFile(tempPath);
+
+            // Replace original with optimized (webp) but keep original extension name for simplicity in DB
+            // OR change filename to .webp. Let's keep original extension but contents are optimized.
+            // Actually, keep original format but optimize.
+            
+            const isPng = req.file.mimetype === 'image/png';
+            
+            let sharpOp = sharp(filePath)
+                .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true });
+            
+            if (isPng) {
+                await sharpOp.png({ quality: 80, compressionLevel: 9 }).toFile(tempPath);
+            } else {
+                await sharpOp.jpeg({ quality: 80, progressive: true }).toFile(tempPath);
+            }
+
+            fs.unlinkSync(filePath);
+            fs.renameSync(tempPath, filePath);
+            
+            logger.info(`Optimized image ${req.file.filename}`);
+        }
+
+        res.json({ url: fileUrl });
+    } catch (err) {
+        logger.error('Optimization error:', err);
+        // Still return the original if optimization fails
+        res.json({ url: fileUrl });
+    }
 });
 
 // Error handling middleware for upload errors

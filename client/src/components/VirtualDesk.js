@@ -455,7 +455,11 @@ const VirtualDesk = () => {
                                 onClick={e => e.stopPropagation()}
                             >
                                 <span className="item-icon">
-                                    {item.icon || dishes.find(d => String(d._id) === String(item.type))?.icon || '🍽️'}
+                                    {(item.icon && (item.icon.startsWith('http') || item.icon.startsWith('/uploads'))) ? (
+                                        <img src={item.icon.startsWith('http') ? item.icon : `${API_URL.replace('/api', '')}${item.icon}`} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    ) : (
+                                        item.icon || dishes.find(d => String(d._id) === String(item.type))?.icon || '🍽️'
+                                    )}
                                 </span>
                                 <span className="item-text">{item.name}</span>
                                 <button className="item-delete" onClick={e => handleDeleteItem(e, item._id)}>×</button>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import API_URL from '../api';
 import ConfirmModal from './ConfirmModal';
@@ -16,8 +16,9 @@ const DishManagement = () => {
     const [name, setName] = useState('');
     const [icon, setIcon] = useState('🍽️');
     
-    // modal
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
+    const [uploading, setUploading] = useState(false);
+    const fileInputRef = useRef(null);
     const toast = useToast();
 
     useEffect(() => {
@@ -95,6 +96,44 @@ const DishManagement = () => {
         setIcon('🍽️');
     };
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            setUploading(true);
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/upload`, formData, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            setIcon(res.data.url);
+            toast.success('Іконку завантажено!');
+        } catch (err) {
+            console.error(err);
+            toast.error(err.response?.data?.error || 'Помилка завантаження файлу');
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const renderIcon = (iconValue, className = "") => {
+        if (!iconValue) return null;
+        const isUrl = iconValue.startsWith('http') || iconValue.startsWith('/uploads');
+        if (isUrl) {
+            const baseUrl = API_URL.replace('/api', '');
+            const fullUrl = iconValue.startsWith('http') ? iconValue : `${baseUrl}${iconValue}`;
+            return <img src={fullUrl} alt="icon" className={className} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />;
+        }
+        return <span className={className}>{iconValue}</span>;
+    };
+
     return (
         <div className="dish-management-container">
             <header className="content-header">
@@ -116,7 +155,7 @@ const DishManagement = () => {
                             />
                         </div>
                         <div className="form-group">
-                            <label>Іконка (Емодзі)</label>
+                            <label>Іконка (Емодзі або фото)</label>
                             <div className="icon-selector">
                                 {PRESET_ICONS.map(i => (
                                     <button
@@ -130,13 +169,43 @@ const DishManagement = () => {
                                 ))}
                                 <input
                                     type="text"
-                                    value={icon}
+                                    value={icon.startsWith('/uploads') ? '🖼️ Фото' : icon}
                                     onChange={e => setIcon(e.target.value)}
                                     placeholder="Своє 💎"
                                     className="custom-icon-input"
                                     maxLength={4}
+                                    disabled={icon.startsWith('/uploads')}
                                 />
+                                <input 
+                                    type="file" 
+                                    ref={fileInputRef} 
+                                    onChange={handleFileUpload} 
+                                    style={{ display: 'none' }} 
+                                    accept="image/*"
+                                />
+                                <button 
+                                    type="button" 
+                                    className="btn-upload-icon" 
+                                    onClick={() => fileInputRef.current.click()}
+                                    disabled={uploading}
+                                >
+                                    {uploading ? '⌛' : '📷'}
+                                </button>
+                                {icon.startsWith('/uploads') && (
+                                    <button 
+                                        type="button" 
+                                        className="btn-remove-icon" 
+                                        onClick={() => setIcon('🍽️')}
+                                    >
+                                        🗑️
+                                    </button>
+                                )}
                             </div>
+                            {icon.startsWith('/uploads') && (
+                                <div className="icon-preview-large">
+                                    {renderIcon(icon)}
+                                </div>
+                            )}
                         </div>
 
                         <div className="form-actions">
@@ -163,7 +232,9 @@ const DishManagement = () => {
                         <div className="dish-grid">
                             {dishes.map(dish => (
                                 <div key={dish._id} className="dish-item-card">
-                                    <div className="dish-icon-preview">{dish.icon}</div>
+                                    <div className="dish-icon-preview">
+                                        {renderIcon(dish.icon)}
+                                    </div>
                                     <div className="dish-details">
                                         <h4>{dish.name}</h4>
                                         <span>Додано: {new Date(dish.createdAt).toLocaleDateString()}</span>

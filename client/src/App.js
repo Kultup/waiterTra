@@ -20,6 +20,9 @@ import Login from './components/Login.js';
 import GamePlay from './components/GamePlay.js';
 import Analytics from './components/Analytics.js';
 import DishManagement from './components/DishManagement.js';
+import Settings from './components/Settings';
+import StudentManager from './components/StudentManager';
+import StudentProfile from './components/StudentProfile';
 
 function AdminPanel({ onLogout, user }) {
   const navigate = useNavigate();
@@ -63,7 +66,9 @@ function AdminPanel({ onLogout, user }) {
               <Route path="visual-builder" element={['superadmin', 'admin', 'trainer'].includes(user?.role) ? <VisualGameBuilder /> : <Dashboard user={user} />} />
               <Route path="quiz-builder" element={['superadmin', 'admin', 'trainer'].includes(user?.role) ? <QuizBuilder /> : <Dashboard user={user} />} />
               <Route path="complex-builder" element={['superadmin', 'admin'].includes(user?.role) ? <ComplexTestBuilder /> : <Dashboard user={user} />} />
-              <Route path="settings" element={<div className="placeholder-view"><h2>Налаштування системи</h2><p>Цей розділ в розробці...</p></div>} />
+              <Route path="settings" element={['superadmin', 'admin'].includes(user?.role) ? <Settings user={user} /> : <Dashboard user={user} />} />
+              <Route path="students" element={['superadmin', 'admin'].includes(user?.role) ? <StudentManager /> : <Dashboard user={user} />} />
+              <Route path="students/:id" element={['superadmin', 'admin'].includes(user?.role) ? <StudentProfile /> : <Dashboard user={user} />} />
               <Route path="*" element={<Dashboard user={user} />} />
             </>
           )}

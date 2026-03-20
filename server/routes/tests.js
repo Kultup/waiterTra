@@ -6,6 +6,7 @@ const MultiDeskTest = require('../models/MultiDeskTest');
 const TestResult = require('../models/TestResult');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
+const { syncStudent } = require('../utils/studentSync');
 const router = express.Router();
 
 // ── Multi-desk test (адмін створює, студент проходить) ────────────────────────
@@ -59,6 +60,14 @@ router.get('/multi/:hash', async (req, res) => {
     const response = test.toObject();
     response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
 
+    // Strip template items (correct positions) — scoring is server-side
+    if (response.templateIds) {
+      response.templateIds = response.templateIds.map(t => {
+        const { items, ...rest } = t;
+        return rest;
+      });
+    }
+
     // Трекінг відвідування
     PageView.create({
       testType: 'multi-desk',
@@ -71,6 +80,52 @@ router.get('/multi/:hash', async (req, res) => {
     res.json(response);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Check a single multi-desk step — server-side scoring
+router.post('/multi/:hash/check-step', async (req, res) => {
+  const { stepIndex, items } = req.body;
+  if (stepIndex == null || !Array.isArray(items)) {
+    return res.status(400).json({ error: 'stepIndex, items required' });
+  }
+  try {
+    const test = await MultiDeskTest.findOne({ hash: req.params.hash }).populate('templateIds');
+    if (!test) return res.status(404).json({ error: 'Тест не знайдено' });
+
+    const template = test.templateIds[stepIndex];
+    if (!template) return res.status(400).json({ error: 'Invalid stepIndex' });
+
+    const targetItems = template.items;
+    const tolerance = 50;
+    let score = 0;
+
+    const validatedItems = items.map(userItem => {
+      const match = targetItems.find(t =>
+        userItem.type === t.type &&
+        Math.abs(userItem.x - t.x) < tolerance &&
+        Math.abs(userItem.y - t.y) < tolerance
+      );
+      return { ...userItem, isCorrect: !!match };
+    });
+
+    targetItems.forEach(target => {
+      const found = items.some(ui =>
+        ui.type === target.type &&
+        Math.abs(ui.x - target.x) < tolerance &&
+        Math.abs(ui.y - target.y) < tolerance
+      );
+      if (found) score++;
+    });
+
+    const total = targetItems.length;
+    const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
+    const passed = percentage >= 80;
+    const ghostItems = targetItems.map(i => ({ type: i.type, name: i.name, icon: i.icon, x: i.x, y: i.y }));
+
+    res.json({ score, total, percentage, passed, validatedItems, ghostItems });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -128,6 +183,9 @@ router.post('/multi/:hash/submit', async (req, res) => {
         score, total, percentage, passed
       });
       await result.save();
+      
+      // Sync student stats and emit real-time event
+      await syncStudent(studentName, studentLastName, studentCity, req.app.get('io'), result);
     }
 
     res.status(201).json({ stepResults });
@@ -151,6 +209,11 @@ router.get('/:hash', async (req, res) => {
 
     const response = test.toObject();
     response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
+
+    // Strip template items (correct positions) — scoring is server-side
+    if (response.templateId && response.templateId.items) {
+      delete response.templateId.items;
+    }
 
     // Трекінг відвідування
     PageView.create({
@@ -237,7 +300,10 @@ router.post('/:hash/submit', async (req, res) => {
     });
     await result.save();
 
-    res.status(201).json({ score, total, percentage, passed, validatedItems });
+    // Return ghost items (correct positions) for overlay
+    const ghostItems = targetItems.map(i => ({ type: i.type, name: i.name, icon: i.icon, x: i.x, y: i.y }));
+
+    res.status(201).json({ score, total, percentage, passed, validatedItems, ghostItems });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
