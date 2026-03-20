@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import API_URL from '../api';
@@ -10,26 +10,36 @@ const formatDate = (dateStr) =>
         hour: '2-digit', minute: '2-digit'
     });
 
-const groupBy = (arr, key) =>
-    arr.reduce((acc, item) => {
-        const group = item[key] || 'Без назви';
-        if (!acc[group]) acc[group] = [];
-        acc[group].push(item);
-        return acc;
-    }, {});
+const initials = (...parts) =>
+    parts.filter(Boolean).map(s => s[0]?.toUpperCase()).join('');
+
+// ── Avatar ────────────────────────────────────────────────────────────────────
+
+const Avatar = ({ text, passed }) => (
+    <div className={`tr-avatar ${passed ? 'pass' : 'fail'}`}>
+        {text || '?'}
+    </div>
+);
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 
 const DetailModal = ({ show, onClose, children, title }) => {
+    useEffect(() => {
+        if (!show) return;
+        const handler = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [show, onClose]);
+
     if (!show) return null;
     return (
-        <div className="detail-overlay" onClick={onClose}>
-            <div className="detail-modal" onClick={e => e.stopPropagation()}>
-                <div className="detail-header">
-                    <h3>{title}</h3>
-                    <button className="detail-close" onClick={onClose}>×</button>
+        <div className="tr-overlay" onClick={onClose}>
+            <div className="tr-modal" onClick={e => e.stopPropagation()}>
+                <div className="tr-modal-header">
+                    <span className="tr-modal-title">{title}</span>
+                    <button className="tr-modal-close" onClick={onClose}>✕</button>
                 </div>
-                <div className="detail-body">{children}</div>
+                <div className="tr-modal-body">{children}</div>
             </div>
         </div>
     );
@@ -39,56 +49,43 @@ const DetailModal = ({ show, onClose, children, title }) => {
 
 const DeskDetail = ({ item }) => {
     const wrongItems = (item.userItems || []).filter(i => !i.isCorrect);
-    const missingItems = (item.targetItems || []).filter(target => {
-        return !(item.userItems || []).some(ui =>
-            ui.type === target.type && ui.isCorrect
-        );
-    });
-
+    const missingItems = (item.targetItems || []).filter(target =>
+        !(item.userItems || []).some(ui => ui.type === target.type && ui.isCorrect)
+    );
     return (
-        <div className="detail-content">
-            <div className="detail-grid">
-                <div className="detail-field"><span className="field-label">Дата</span><span>{formatDate(item.completedAt)}</span></div>
-                <div className="detail-field"><span className="field-label">Ім'я</span><span>{item.studentLastName} {item.studentName}</span></div>
-                <div className="detail-field"><span className="field-label">Місто</span><span>{item.studentCity}</span></div>
-                <div className="detail-field"><span className="field-label">Посада</span><span>{item.studentPosition || '—'}</span></div>
-                <div className="detail-field"><span className="field-label">Шаблон</span><span>{item.templateName}</span></div>
+        <div className="tr-detail">
+            <div className="tr-detail-meta">
+                <MetaField label="Дата" value={formatDate(item.completedAt)} />
+                <MetaField label="Ім'я" value={`${item.studentLastName} ${item.studentName}`} />
+                <MetaField label="Місто" value={item.studentCity} />
+                <MetaField label="Посада" value={item.studentPosition || '—'} />
+                <MetaField label="Шаблон" value={item.templateName} span={2} />
             </div>
-            <div className="detail-score-block">
-                <div className="detail-big-score" style={{ color: item.passed ? '#4ade80' : '#f87171' }}>
-                    {item.percentage}%
-                </div>
-                <p>Правильно: <strong>{item.score}</strong> з <strong>{item.total}</strong></p>
-                <span className={`status-pill ${item.passed ? 'pass' : 'fail'}`}>
-                    {item.passed ? 'Пройдено' : 'Не здано'}
-                </span>
-            </div>
+            <ScoreBlock
+                score={`${item.percentage}%`}
+                sub={`${item.score} з ${item.total} правильно`}
+                passed={item.passed}
+                label={item.passed ? 'Пройдено' : 'Не здано'}
+            />
             {(wrongItems.length > 0 || missingItems.length > 0) && (
-                <div className="detail-errors">
-                    <div className="detail-steps-label">🔍 Аналіз помилок</div>
+                <ErrorSection>
                     {wrongItems.length > 0 && (
-                        <div className="error-section">
-                            <div className="error-label">❌ Неправильно розміщені ({wrongItems.length})</div>
+                        <ErrorGroup label={`❌ Неправильно розміщені (${wrongItems.length})`}>
                             {wrongItems.map((it, i) => (
-                                <div key={i} className="error-item wrong">
-                                    <span>{it.icon || '🍽️'} {it.name || it.type}</span>
-                                    <span className="error-hint">поз. ({Math.round(it.x)}, {Math.round(it.y)})</span>
-                                </div>
+                                <ErrorItem key={i} icon={it.icon} name={it.name || it.type}
+                                    hint={`(${Math.round(it.x)}, ${Math.round(it.y)})`} type="wrong" />
                             ))}
-                        </div>
+                        </ErrorGroup>
                     )}
                     {missingItems.length > 0 && (
-                        <div className="error-section">
-                            <div className="error-label">⚠️ Пропущені предмети ({missingItems.length})</div>
+                        <ErrorGroup label={`⚠️ Пропущені предмети (${missingItems.length})`}>
                             {missingItems.map((it, i) => (
-                                <div key={i} className="error-item missing">
-                                    <span>{it.icon || '🍽️'} {it.name || it.type}</span>
-                                    <span className="error-hint">очік. ({Math.round(it.x)}, {Math.round(it.y)})</span>
-                                </div>
+                                <ErrorItem key={i} icon={it.icon} name={it.name || it.type}
+                                    hint={`(${Math.round(it.x)}, ${Math.round(it.y)})`} type="missing" />
                             ))}
-                        </div>
+                        </ErrorGroup>
                     )}
-                </div>
+                </ErrorSection>
             )}
         </div>
     );
@@ -97,384 +94,268 @@ const DeskDetail = ({ item }) => {
 // ── Game detail ──────────────────────────────────────────────────────────────
 
 const GameDetail = ({ item }) => (
-    <div className="detail-content">
-        <div className="detail-grid">
-            <div className="detail-field"><span className="field-label">Дата</span><span>{formatDate(item.completedAt)}</span></div>
-            <div className="detail-field"><span className="field-label">Ім'я</span><span>{item.playerLastName} {item.playerName}</span></div>
-            <div className="detail-field"><span className="field-label">Місто</span><span>{item.playerCity}</span></div>
-            <div className="detail-field"><span className="field-label">Посада</span><span>{item.playerPosition || '—'}</span></div>
-            <div className="detail-field"><span className="field-label">Сценарій</span><span>{item.scenarioTitle}</span></div>
-            <div className="detail-field"><span className="field-label">Кінцівка</span><span>{item.endingTitle || '—'}</span></div>
+    <div className="tr-detail">
+        <div className="tr-detail-meta">
+            <MetaField label="Дата" value={formatDate(item.completedAt)} />
+            <MetaField label="Ім'я" value={`${item.playerLastName} ${item.playerName}`} />
+            <MetaField label="Місто" value={item.playerCity} />
+            <MetaField label="Посада" value={item.playerPosition || '—'} />
+            <MetaField label="Сценарій" value={item.scenarioTitle} />
+            <MetaField label="Кінцівка" value={item.endingTitle || '—'} />
         </div>
-        <div className="detail-score-block">
-            <div className="detail-big-score" style={{ color: item.isWin ? '#4ade80' : '#f87171' }}>
-                {item.isWin ? '🎉' : '😔'}
-            </div>
-            <span className={`status-pill ${item.isWin ? 'pass' : 'fail'}`}>
-                {item.isWin ? 'Перемога' : 'Поразка'}
-            </span>
-        </div>
-        {item.choicePath && item.choicePath.length > 0 && (
-            <div className="detail-errors">
-                <div className="detail-steps-label">🔍 Шлях вибору ({item.choicePath.length} кроків)</div>
-                <div className="choice-path">
+        <ScoreBlock
+            score={item.isWin ? '🎉' : '😔'}
+            passed={item.isWin}
+            label={item.isWin ? 'Перемога' : 'Поразка'}
+        />
+        {item.choicePath?.length > 0 && (
+            <ErrorSection label={`🔍 Шлях вибору (${item.choicePath.length} кроків)`}>
+                <div className="tr-path">
                     {item.choicePath.map((cp, i) => (
-                        <div key={i} className="choice-path-step">
-                            <div className="cp-number">{i + 1}</div>
-                            <div className="cp-content">
-                                {cp.nodeText && <div className="cp-node">{cp.nodeText}</div>}
-                                <div className="cp-choice">→ {cp.choiceText}</div>
+                        <div key={i} className="tr-path-step">
+                            <div className="tr-path-num">{i + 1}</div>
+                            <div className="tr-path-body">
+                                {cp.nodeText && <div className="tr-path-node">{cp.nodeText}</div>}
+                                <div className="tr-path-choice">→ {cp.choiceText}</div>
                             </div>
                         </div>
                     ))}
                 </div>
-            </div>
+            </ErrorSection>
         )}
     </div>
 );
 
 // ── Quiz detail ──────────────────────────────────────────────────────────────
 
+const VideoPlayerMini = ({ url }) => {
+    if (!url) return null;
+    const ytMatch = url.match(/(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^&]+)/);
+    if (ytMatch) return <iframe title="yt" width="100%" height="100%"
+        src={`https://www.youtube.com/embed/${ytMatch[1]}`} frameBorder="0" allowFullScreen />;
+    const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) return <iframe title="vimeo"
+        src={`https://player.vimeo.com/video/${vimeoMatch[1]}`} width="100%" height="100%" frameBorder="0" allowFullScreen />;
+    const src = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}${url}`;
+    return <video controls style={{ width: '100%', height: '100%' }}><source src={src} /></video>;
+};
+
 const QuizAnswersList = ({ answers }) => (
-    <div className="detail-errors">
-        <div className="detail-steps-label">🔍 Аналіз відповідей</div>
+    <ErrorSection label="🔍 Аналіз відповідей">
         {answers.map((a, i) => (
-            <div key={i} className={`answer-row ${a.isCorrect ? 'correct' : 'wrong'}`}>
-                <div className="answer-q">
-                    Питання {i + 1}: {a.questionText}
-                </div>
+            <div key={i} className={`tr-answer ${a.isCorrect ? 'correct' : 'wrong'}`}>
+                <div className="tr-answer-q">Питання {i + 1}: {a.questionText}</div>
                 {a.image && (
-                    <div className="answer-media" style={{ margin: '0.5rem 0', maxWidth: '200px' }}>
-                        <img src={a.image.startsWith('http') ? a.image : `${API_URL.replace('/api', '')}${a.image}`}
-                            alt="question" style={{ width: '100%', borderRadius: '4px' }} />
-                    </div>
+                    <img src={a.image.startsWith('http') ? a.image : `${API_URL.replace('/api', '')}${a.image}`}
+                        alt="" className="tr-answer-img" />
                 )}
                 {a.video && (
-                    <div className="answer-media" style={{ margin: '0.5rem 0', maxWidth: '300px' }}>
-                        <div style={{ aspectRatio: '16/9', background: '#000', borderRadius: '4px', overflow: 'hidden' }}>
-                            <VideoPlayerMini url={a.video} />
-                        </div>
+                    <div className="tr-answer-video">
+                        <VideoPlayerMini url={a.video} />
                     </div>
                 )}
-                <div className="answer-details">
-                    <span className={`answer-badge ${a.isCorrect ? 'correct' : 'wrong'}`}>
+                <div className="tr-answer-row">
+                    <span className={`tr-answer-badge ${a.isCorrect ? 'correct' : 'wrong'}`}>
                         {a.isCorrect ? '✅' : '❌'} {a.givenAnswer}
                     </span>
                     {!a.isCorrect && (
-                        <div className="answer-correction">
-                            <span className="answer-correct">✓ {a.correctAnswer}</span>
+                        <div className="tr-answer-correction">
+                            <span className="tr-answer-correct">✓ {a.correctAnswer}</span>
                             {a.explanation && (
-                                <div className="answer-explanation">
-                                    <strong>Пояснення:</strong> {a.explanation}
-                                </div>
+                                <div className="tr-answer-explain">{a.explanation}</div>
                             )}
                         </div>
                     )}
                 </div>
             </div>
         ))}
-    </div>
+    </ErrorSection>
 );
-
-const VideoPlayerMini = ({ url }) => {
-    if (!url) return null;
-    const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/);
-    if (ytMatch && ytMatch[1]) {
-        const videoId = ytMatch[1].split('&')[0];
-        return <iframe title="YouTube video" width="100%" height="100%" src={`https://www.youtube.com/embed/${videoId}`} frameBorder="0" allowFullScreen></iframe>;
-    }
-    const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
-    if (vimeoMatch && vimeoMatch[1]) {
-        return <iframe title="Vimeo video" src={`https://player.vimeo.com/video/${vimeoMatch[1]}`} width="100%" height="100%" frameBorder="0" allowFullScreen></iframe>;
-    }
-    const videoSrc = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}${url}`;
-    return <video controls style={{ width: '100%', height: '100%' }}><source src={videoSrc} /></video>;
-};
 
 const QuizDetail = ({ item }) => (
-    <div className="detail-content">
-        <div className="detail-grid">
-            <div className="detail-field"><span className="field-label">Дата</span><span>{formatDate(item.completedAt)}</span></div>
-            <div className="detail-field"><span className="field-label">Ім'я</span><span>{item.studentLastName} {item.studentName}</span></div>
-            <div className="detail-field"><span className="field-label">Місто</span><span>{item.studentCity}</span></div>
-            <div className="detail-field"><span className="field-label">Посада</span><span>{item.studentPosition || '—'}</span></div>
-            <div className="detail-field"><span className="field-label">Квіз</span><span>{item.quizId?.title || 'Видалений квіз'}</span></div>
+    <div className="tr-detail">
+        <div className="tr-detail-meta">
+            <MetaField label="Дата" value={formatDate(item.completedAt)} />
+            <MetaField label="Ім'я" value={`${item.studentLastName} ${item.studentName}`} />
+            <MetaField label="Місто" value={item.studentCity} />
+            <MetaField label="Посада" value={item.studentPosition || '—'} />
+            <MetaField label="Квіз" value={item.quizId?.title || 'Видалений квіз'} span={2} />
         </div>
-        <div className="detail-score-block">
-            <div className="detail-big-score" style={{ color: item.percentage >= 80 ? '#4ade80' : '#f87171' }}>
-                {item.percentage}%
-            </div>
-            <p>Правильно: <strong>{item.score}</strong> з <strong>{item.total}</strong></p>
-        </div>
-        {item.answers && item.answers.length > 0 && <QuizAnswersList answers={item.answers} />}
+        <ScoreBlock
+            score={`${item.percentage}%`}
+            sub={`${item.score} з ${item.total} правильно`}
+            passed={item.percentage >= 80}
+            label={item.percentage >= 80 ? 'Пройдено' : 'Не здано'}
+        />
+        {item.answers?.length > 0 && <QuizAnswersList answers={item.answers} />}
     </div>
 );
 
-// ── Complex detail ───────────────────────────────────────────────────────────
+// ── Complex detail ────────────────────────────────────────────────────────────
 
 const ComplexDetail = ({ item }) => {
-    const [expandedStep, setExpandedStep] = React.useState(null);
-
+    const [expanded, setExpanded] = useState(null);
     return (
-        <div className="detail-content">
-            <div className="detail-grid">
-                <div className="detail-field"><span className="field-label">Дата</span><span>{formatDate(item.completedAt)}</span></div>
-                <div className="detail-field"><span className="field-label">Ім'я</span><span>{item.studentLastName} {item.studentName}</span></div>
-                <div className="detail-field"><span className="field-label">Місто</span><span>{item.studentCity}</span></div>
-                <div className="detail-field"><span className="field-label">Посада</span><span>{item.studentPosition || '—'}</span></div>
-                <div className="detail-field"><span className="field-label">Тест</span><span>{item.complexTestId?.title || 'Видалений тест'}</span></div>
+        <div className="tr-detail">
+            <div className="tr-detail-meta">
+                <MetaField label="Дата" value={formatDate(item.completedAt)} />
+                <MetaField label="Ім'я" value={`${item.studentLastName} ${item.studentName}`} />
+                <MetaField label="Місто" value={item.studentCity} />
+                <MetaField label="Посада" value={item.studentPosition || '—'} />
+                <MetaField label="Тест" value={item.complexTestId?.title || 'Видалений тест'} span={2} />
             </div>
-            <div className="detail-score-block">
-                <div className="detail-big-score" style={{ color: item.overallPassed ? '#4ade80' : '#f87171' }}>
-                    {item.overallPassed ? '✅' : '❌'}
-                </div>
-                <span className={`status-pill ${item.overallPassed ? 'pass' : 'fail'}`}>
-                    {item.overallPassed ? 'Всі кроки пройдено' : 'Є провалені кроки'}
-                </span>
-            </div>
-            {item.steps && item.steps.length > 0 && (
-                <div className="detail-steps">
-                    <div className="detail-steps-label">Деталі кроків (натисніть на квіз для аналізу)</div>
-                    <table className="result-table detail-table">
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Тип</th>
-                                <th>Назва</th>
-                                <th>Бали</th>
-                                <th>Статус</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {item.steps.map((s, i) => (
-                                <React.Fragment key={i}>
-                                    <tr
-                                        onClick={() => s.type === 'quiz' && s.answers ? setExpandedStep(expandedStep === i ? null : i) : null}
-                                        style={{ cursor: s.type === 'quiz' && s.answers ? 'pointer' : 'default' }}
-                                        className={s.type === 'quiz' && s.answers ? 'clickable-row' : ''}
-                                    >
-                                        <td>{i + 1}</td>
-                                        <td>{s.type === 'desk' ? '🖥️' : s.type === 'game' ? '🎮' : '📝'}</td>
-                                        <td>{s.title || '—'} {s.type === 'quiz' && s.answers && (expandedStep === i ? '🔼' : '🔽')}</td>
-                                        <td>{s.score}/{s.total} ({s.percentage}%)</td>
-                                        <td>
-                                            <span className={`status-pill ${s.passed ? 'pass' : 'fail'}`}>
-                                                {s.passed ? 'OK' : '✗'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                    {expandedStep === i && s.answers && (
-                                        <tr>
-                                            <td colSpan="5" style={{ padding: '0', background: 'rgba(255,255,255,0.02)' }}>
-                                                <div style={{ padding: '1rem' }}>
-                                                    <QuizAnswersList answers={s.answers} />
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
-                                </React.Fragment>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+            <ScoreBlock
+                score={item.overallPassed ? '✅' : '❌'}
+                passed={item.overallPassed}
+                label={item.overallPassed ? 'Всі кроки пройдено' : 'Є провалені кроки'}
+            />
+            {item.steps?.length > 0 && (
+                <ErrorSection label="Деталі кроків">
+                    {item.steps.map((s, i) => (
+                        <React.Fragment key={i}>
+                            <div
+                                className={`tr-step ${s.passed ? 'pass' : 'fail'} ${s.type === 'quiz' && s.answers ? 'clickable' : ''}`}
+                                onClick={() => s.type === 'quiz' && s.answers && setExpanded(expanded === i ? null : i)}
+                            >
+                                <div className="tr-step-icon">
+                                    {s.type === 'desk' ? '🖥️' : s.type === 'game' ? '🎮' : '📝'}
+                                </div>
+                                <div className="tr-step-name">{s.title || '—'}</div>
+                                <div className="tr-step-score">{s.score}/{s.total} · {s.percentage}%</div>
+                                <span className={`tr-pill ${s.passed ? 'pass' : 'fail'}`}>
+                                    {s.passed ? 'OK' : '✗'}
+                                </span>
+                                {s.type === 'quiz' && s.answers && (
+                                    <span className="tr-step-toggle">{expanded === i ? '▲' : '▼'}</span>
+                                )}
+                            </div>
+                            {expanded === i && s.answers && (
+                                <div className="tr-step-answers">
+                                    <QuizAnswersList answers={s.answers} />
+                                </div>
+                            )}
+                        </React.Fragment>
+                    ))}
+                </ErrorSection>
             )}
         </div>
     );
 };
 
-// ── Group components (with clickable rows) ────────────────────────────────────
+// ── Shared detail sub-components ──────────────────────────────────────────────
 
-const DeskGroup = ({ name, items, onRowClick }) => {
-    const passed = items.filter(r => r.passed).length;
-    const avg = Math.round(items.reduce((s, r) => s + r.percentage, 0) / items.length);
+const MetaField = ({ label, value, span }) => (
+    <div className="tr-meta-field" style={span ? { gridColumn: `span ${span}` } : {}}>
+        <span className="tr-meta-label">{label}</span>
+        <span className="tr-meta-value">{value}</span>
+    </div>
+);
 
-    return (
-        <div className="result-group">
-            <div className="result-group-header">
-                <div className="group-title">
-                    <span className="group-icon">🍽️</span>
-                    <h3>{name}</h3>
-                </div>
-                <div className="group-meta">
-                    <span className="meta-chip">{items.length} спроб</span>
-                    <span className="meta-chip passed">{passed} здали</span>
-                    <span className="meta-chip neutral">середнє {avg}%</span>
-                </div>
-            </div>
-            <table className="result-table">
-                <thead>
-                    <tr>
-                        <th>Дата</th>
-                        <th>Ім'я</th>
-                        <th>Місто</th>
-                        <th>Посада</th>
-                        <th>Результат</th>
-                        <th>Статус</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {items.map(r => (
-                        <tr key={r._id} className="clickable-row" onClick={() => onRowClick(r)}>
-                            <td className="col-date">{formatDate(r.completedAt)}</td>
-                            <td><strong>{r.studentLastName} {r.studentName}</strong></td>
-                            <td>{r.studentCity}</td>
-                            <td>{r.studentPosition || '—'}</td>
-                            <td>
-                                <span className="score-badge">
-                                    {r.score}/{r.total}
-                                    <small>{r.percentage}%</small>
-                                </span>
-                            </td>
-                            <td>
-                                <span className={`status-pill ${r.passed ? 'pass' : 'fail'}`}>
-                                    {r.passed ? 'Пройдено' : 'Не здано'}
-                                </span>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+const ScoreBlock = ({ score, sub, passed, label }) => (
+    <div className={`tr-score-block ${passed ? 'pass' : 'fail'}`}>
+        <div className="tr-score-big">{score}</div>
+        {sub && <div className="tr-score-sub">{sub}</div>}
+        <span className={`tr-pill ${passed ? 'pass' : 'fail'}`}>{label}</span>
+    </div>
+);
+
+const ErrorSection = ({ label, children }) => (
+    <div className="tr-section">
+        {label && <div className="tr-section-label">{label}</div>}
+        {children}
+    </div>
+);
+
+const ErrorGroup = ({ label, children }) => (
+    <div className="tr-error-group">
+        <div className="tr-error-group-label">{label}</div>
+        {children}
+    </div>
+);
+
+const ErrorItem = ({ icon, name, hint, type }) => (
+    <div className={`tr-error-item ${type}`}>
+        <span>{icon || '🍽️'} {name}</span>
+        <span className="tr-error-hint">{hint}</span>
+    </div>
+);
+
+// ── Result Card Row ───────────────────────────────────────────────────────────
+
+const ResultCard = ({ onClick, passed, avatarText, name, sub, city, date, extra, score }) => (
+    <div className={`tr-card ${passed ? 'pass' : 'fail'}`} onClick={onClick}>
+        <Avatar text={avatarText} passed={passed} />
+        <div className="tr-card-main">
+            <div className="tr-card-name">{name}</div>
+            <div className="tr-card-sub">{sub}</div>
         </div>
-    );
-};
-
-const GameGroup = ({ name, items, onRowClick }) => {
-    const wins = items.filter(r => r.isWin).length;
-
-    return (
-        <div className="result-group">
-            <div className="result-group-header">
-                <div className="group-title">
-                    <span className="group-icon">🎮</span>
-                    <h3>{name}</h3>
-                </div>
-                <div className="group-meta">
-                    <span className="meta-chip">{items.length} проходжень</span>
-                    <span className="meta-chip passed">{wins} перемог</span>
-                    <span className="meta-chip fail">{items.length - wins} поразок</span>
-                </div>
-            </div>
-            <table className="result-table">
-                <thead>
-                    <tr>
-                        <th>Дата</th>
-                        <th>Ім'я</th>
-                        <th>Місто</th>
-                        <th>Посада</th>
-                        <th>Кінцівка</th>
-                        <th>Результат</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {items.map(r => (
-                        <tr key={r._id} className="clickable-row" onClick={() => onRowClick(r)}>
-                            <td className="col-date">{formatDate(r.completedAt)}</td>
-                            <td><strong>{r.playerLastName} {r.playerName}</strong></td>
-                            <td>{r.playerCity}</td>
-                            <td>{r.playerPosition || '—'}</td>
-                            <td className="col-ending">{r.endingTitle || '—'}</td>
-                            <td>
-                                <span className={`status-pill ${r.isWin ? 'pass' : 'fail'}`}>
-                                    {r.isWin ? 'Перемога' : 'Поразка'}
-                                </span>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+        <div className="tr-card-city">
+            <span>{city}</span>
+            <span className="tr-card-date">{date}</span>
         </div>
-    );
-};
+        {extra && <div className="tr-card-extra">{extra}</div>}
+        <div className="tr-card-score">{score}</div>
+        <div className="tr-card-chevron">›</div>
+    </div>
+);
 
-const QuizGroup = ({ name, items, onRowClick }) => {
-    const avg = Math.round(items.reduce((s, r) => s + r.percentage, 0) / items.length);
+// ── Group ─────────────────────────────────────────────────────────────────────
 
-    return (
-        <div className="result-group">
-            <div className="result-group-header">
-                <div className="group-title">
-                    <span className="group-icon">📝</span>
-                    <h3>{name}</h3>
-                </div>
-                <div className="group-meta">
-                    <span className="meta-chip">{items.length} спроб</span>
-                    <span className="meta-chip neutral">середнє {avg}%</span>
-                </div>
+const Group = ({ icon, name, chips, children, isOpen, onToggle }) => (
+    <div className="tr-group">
+        <div className="tr-group-header" onClick={onToggle} role="button" tabIndex={0}
+            onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onToggle()}>
+            <div className="tr-group-left">
+                <span className="tr-group-icon">{icon}</span>
+                <span className="tr-group-name">{name}</span>
             </div>
-            <table className="result-table">
-                <thead>
-                    <tr>
-                        <th>Дата</th>
-                        <th>Ім'я</th>
-                        <th>Місто</th>
-                        <th>Посада</th>
-                        <th>Бали</th>
-                        <th>Результат</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {items.map(r => (
-                        <tr key={r._id} className="clickable-row" onClick={() => onRowClick(r)}>
-                            <td className="col-date">{formatDate(r.completedAt)}</td>
-                            <td><strong>{r.studentLastName} {r.studentName}</strong></td>
-                            <td>{r.studentCity}</td>
-                            <td>{r.studentPosition || '—'}</td>
-                            <td>{r.score} / {r.total}</td>
-                            <td>
-                                <span className="score-badge">{r.percentage}%</span>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            <div className="tr-group-right">
+                <div className="tr-group-chips">{chips}</div>
+                <span className={`tr-group-chevron ${isOpen ? 'open' : ''}`}>›</span>
+            </div>
         </div>
-    );
-};
+        {isOpen && <div className="tr-group-body">{children}</div>}
+    </div>
+);
 
-const ComplexGroup = ({ name, items, onRowClick }) => {
-    const passed = items.filter(r => r.overallPassed).length;
+// ── Stats strip ───────────────────────────────────────────────────────────────
 
+const StatsStrip = ({ items, tab }) => {
+    const stats = useMemo(() => {
+        if (!items.length) return null;
+        if (tab === 'game') {
+            const wins = items.filter(r => r.isWin).length;
+            return [
+                { label: 'Всього', value: items.length },
+                { label: 'Перемог', value: wins, color: 'green' },
+                { label: 'Поразок', value: items.length - wins, color: 'red' },
+                { label: 'Рейтинг', value: `${Math.round(wins / items.length * 100)}%`, color: wins / items.length >= 0.8 ? 'green' : 'red' },
+            ];
+        }
+        const passedKey = tab === 'complex' ? 'overallPassed' : 'passed';
+        const passed = items.filter(r => r[passedKey]).length;
+        const rate = Math.round(passed / items.length * 100);
+        const avg = tab !== 'complex'
+            ? Math.round(items.reduce((s, r) => s + (r.percentage || 0), 0) / items.length)
+            : null;
+        return [
+            { label: 'Всього', value: items.length },
+            { label: 'Здали', value: passed, color: 'green' },
+            { label: 'Не здали', value: items.length - passed, color: 'red' },
+            { label: 'Успішність', value: `${rate}%`, color: rate >= 80 ? 'green' : 'red' },
+            ...(avg !== null ? [{ label: 'Середній %', value: `${avg}%`, color: avg >= 80 ? 'green' : 'neutral' }] : []),
+        ];
+    }, [items, tab]);
+
+    if (!stats) return null;
     return (
-        <div className="result-group">
-            <div className="result-group-header">
-                <div className="group-title">
-                    <span className="group-icon">🧩</span>
-                    <h3>{name}</h3>
+        <div className="tr-stats">
+            {stats.map((s, i) => (
+                <div key={i} className={`tr-stat ${s.color || ''}`}>
+                    <div className="tr-stat-value">{s.value}</div>
+                    <div className="tr-stat-label">{s.label}</div>
                 </div>
-                <div className="group-meta">
-                    <span className="meta-chip">{items.length} проходжень</span>
-                    <span className="meta-chip passed">{passed} пройшли</span>
-                    <span className="meta-chip fail">{items.length - passed} провалено</span>
-                </div>
-            </div>
-            <table className="result-table">
-                <thead>
-                    <tr>
-                        <th>Дата</th>
-                        <th>Ім'я</th>
-                        <th>Місто</th>
-                        <th>Посада</th>
-                        <th>Кроків</th>
-                        <th>Статус</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {items.map(r => (
-                        <tr key={r._id} className="clickable-row" onClick={() => onRowClick(r)}>
-                            <td className="col-date">{formatDate(r.completedAt)}</td>
-                            <td><strong>{r.studentLastName} {r.studentName}</strong></td>
-                            <td>{r.studentCity}</td>
-                            <td>{r.studentPosition || '—'}</td>
-                            <td>{r.steps?.length || 0}</td>
-                            <td>
-                                <span className={`status-pill ${r.overallPassed ? 'pass' : 'fail'}`}>
-                                    {r.overallPassed ? 'Пройдено' : 'Не здано'}
-                                </span>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            ))}
         </div>
     );
 };
@@ -488,13 +369,14 @@ const TestResults = ({ user }) => {
     const [quizResults, setQuizResults] = useState([]);
     const [complexResults, setComplexResults] = useState([]);
     const [loading, setLoading] = useState(true);
-    
-    // Фільтри для експорту
+    const [search, setSearch] = useState('');
+    const [collapsed, setCollapsed] = useState({});
+    const [sortOrder, setSortOrder] = useState('newest');
+
     const [exportCity, setExportCity] = useState('');
     const [exportDays, setExportDays] = useState(30);
     const [cities, setCities] = useState([]);
 
-    // Detail modal state
     const [detailItem, setDetailItem] = useState(null);
     const [detailType, setDetailType] = useState(null);
 
@@ -508,47 +390,16 @@ const TestResults = ({ user }) => {
         });
     };
 
-    // Завантаження списку міст
     useEffect(() => {
-        const fetchCities = async () => {
-            try {
-                const token = localStorage.getItem('token');
-                const res = await axios.get(`${API_URL}/cities`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setCities(res.data);
-            } catch (err) {
-                console.error('Failed to fetch cities:', err);
-            }
-        };
-        fetchCities();
+        axios.get(`${API_URL}/cities`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        }).then(res => setCities(res.data)).catch(() => {});
     }, []);
-
-    // Фільтрація для експорту
-    const filterForExport = (list) => {
-        let filtered = [...list];
-        
-        // Фільтр по місту (тільки для superadmin)
-        if (user?.role === 'superadmin' && exportCity) {
-            filtered = filtered.filter(item => {
-                const city = item.studentCity || item.playerCity;
-                return city === exportCity;
-            });
-        }
-        
-        // Фільтр по періоду
-        const daysAgo = new Date();
-        daysAgo.setDate(daysAgo.getDate() - exportDays);
-        filtered = filtered.filter(item => new Date(item.completedAt) >= daysAgo);
-        
-        return filtered;
-    };
 
     const fetchAll = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            const config = { headers: { Authorization: `Bearer ${token}` } };
+            const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
             const [deskRes, gameRes, quizRes, complexRes] = await Promise.all([
                 axios.get(`${API_URL}/test-results`, config),
                 axios.get(`${API_URL}/game-results`, config),
@@ -559,8 +410,8 @@ const TestResults = ({ user }) => {
             setGameResults(filterByCity(gameRes.data));
             setQuizResults(filterByCity(quizRes.data));
             setComplexResults(filterByCity(complexRes.data));
-        } catch (error) {
-            console.error('Error fetching results:', error);
+        } catch (err) {
+            console.error('Error fetching results:', err);
         } finally {
             setLoading(false);
         }
@@ -568,193 +419,301 @@ const TestResults = ({ user }) => {
 
     useEffect(() => { fetchAll(); }, []);
 
-    const openDetail = (type, item) => {
-        setDetailType(type);
-        setDetailItem(item);
+    const openDetail = (type, item) => { setDetailType(type); setDetailItem(item); };
+    const closeDetail = () => { setDetailItem(null); setDetailType(null); };
+
+    const toggleGroup = (name) =>
+        setCollapsed(prev => ({ ...prev, [name]: !prev[name] }));
+
+    const isOpen = (name) => collapsed[name] !== true;
+
+    // Current tab raw results
+    const currentRaw = tab === 'desk' ? deskResults
+        : tab === 'game' ? gameResults
+        : tab === 'quiz' ? quizResults
+        : complexResults;
+
+    // Search filter
+    const searchLower = search.toLowerCase();
+    const matchSearch = (r) => {
+        if (!searchLower) return true;
+        const name = `${r.studentLastName || r.playerLastName || ''} ${r.studentName || r.playerName || ''}`.toLowerCase();
+        const city = (r.studentCity || r.playerCity || '').toLowerCase();
+        return name.includes(searchLower) || city.includes(searchLower);
     };
 
-    const closeDetail = () => {
-        setDetailItem(null);
-        setDetailType(null);
-    };
+    // Sort
+    const sorted = (arr) => [...arr].sort((a, b) => {
+        const da = new Date(a.completedAt), db = new Date(b.completedAt);
+        return sortOrder === 'newest' ? db - da : da - db;
+    });
 
-    const deskGroups = groupBy(deskResults, 'templateName');
-    const gameGroups = groupBy(gameResults, 'scenarioTitle');
-    const quizGroups = quizResults.reduce((acc, r) => {
-        const name = r.quizId?.title || 'Видалений квіз';
-        if (!acc[name]) acc[name] = [];
-        acc[name].push(r);
-        return acc;
-    }, {});
-    const complexGroups = complexResults.reduce((acc, r) => {
-        const name = r.complexTestId?.title || 'Видалений тест';
-        if (!acc[name]) acc[name] = [];
-        acc[name].push(r);
-        return acc;
-    }, {});
+    // Group by
+    const makeGroups = (arr, keyFn) =>
+        arr.filter(matchSearch).reduce((acc, item) => {
+            const k = keyFn(item);
+            if (!acc[k]) acc[k] = [];
+            acc[k].push(item);
+            return acc;
+        }, {});
+
+    const deskGroups = makeGroups(sorted(deskResults), r => r.templateName || 'Без назви');
+    const gameGroups = makeGroups(sorted(gameResults), r => r.scenarioTitle || 'Без назви');
+    const quizGroups = makeGroups(sorted(quizResults), r => r.quizId?.title || 'Видалений квіз');
+    const complexGroups = makeGroups(sorted(complexResults), r => r.complexTestId?.title || 'Видалений тест');
+
+    const currentGroups = tab === 'desk' ? deskGroups
+        : tab === 'game' ? gameGroups
+        : tab === 'quiz' ? quizGroups
+        : complexGroups;
+
+    const filteredTotal = Object.values(currentGroups).flat();
+
+    // Export
+    const filterForExport = (list) => {
+        let f = [...list];
+        if (user?.role === 'superadmin' && exportCity)
+            f = f.filter(r => (r.studentCity || r.playerCity) === exportCity);
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - exportDays);
+        return f.filter(r => new Date(r.completedAt) >= cutoff);
+    };
 
     const exportToExcel = () => {
-        // Застосовуємо фільтри
-        const filteredDesk = filterForExport(deskResults);
-        const filteredGame = filterForExport(gameResults);
-        const filteredQuiz = filterForExport(quizResults);
-        const filteredComplex = filterForExport(complexResults);
-        
-        let data = [];
         const dateStr = new Date().toISOString().split('T')[0];
-        let filename = `results_${exportCity || 'all'}_${exportDays}days_${dateStr}.xlsx`;
-
+        const filename = `results_${exportCity || 'all'}_${exportDays}days_${dateStr}.xlsx`;
+        let data = [];
         if (tab === 'desk') {
-            data = filteredDesk.map(r => ({
-                'Дата': formatDate(r.completedAt),
-                'Прізвище': r.studentLastName,
-                'Ім\'я': r.studentName,
-                'Місто': r.studentCity,
-                'Посада': r.studentPosition || '—',
-                'Шаблон': r.templateName,
-                'Результат': `${r.score}/${r.total}`,
-                'Відсоток': `${r.percentage}%`,
-                'Статус': r.passed ? 'Пройдено' : 'Не здано'
+            data = filterForExport(deskResults).map(r => ({
+                'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
+                'Місто': r.studentCity, 'Посада': r.studentPosition || '—', 'Шаблон': r.templateName,
+                'Результат': `${r.score}/${r.total}`, 'Відсоток': `${r.percentage}%`,
+                'Статус': r.passed ? 'Пройдено' : 'Не здано',
             }));
         } else if (tab === 'game') {
-            data = filteredGame.map(r => ({
-                'Дата': formatDate(r.completedAt),
-                'Прізвище': r.playerLastName,
-                'Ім\'я': r.playerName,
-                'Місто': r.playerCity,
-                'Посада': r.playerPosition || '—',
-                'Сценарій': r.scenarioTitle,
-                'Кінцівка': r.endingTitle || '—',
-                'Результат': r.isWin ? 'Перемога' : 'Поразка'
+            data = filterForExport(gameResults).map(r => ({
+                'Дата': formatDate(r.completedAt), 'Прізвище': r.playerLastName, 'Ім\'я': r.playerName,
+                'Місто': r.playerCity, 'Посада': r.playerPosition || '—', 'Сценарій': r.scenarioTitle,
+                'Кінцівка': r.endingTitle || '—', 'Результат': r.isWin ? 'Перемога' : 'Поразка',
             }));
         } else if (tab === 'quiz') {
-            data = filteredQuiz.map(r => ({
-                'Дата': formatDate(r.completedAt),
-                'Прізвище': r.studentLastName,
-                'Ім\'я': r.studentName,
-                'Місто': r.studentCity,
-                'Посада': r.studentPosition || '—',
-                'Квіз': r.quizId?.title || 'Видалений',
-                'Бали': `${r.score}/${r.total}`,
-                'Відсоток': `${r.percentage}%`
+            data = filterForExport(quizResults).map(r => ({
+                'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
+                'Місто': r.studentCity, 'Посада': r.studentPosition || '—',
+                'Квіз': r.quizId?.title || 'Видалений', 'Бали': `${r.score}/${r.total}`,
+                'Відсоток': `${r.percentage}%`,
             }));
-        } else if (tab === 'complex') {
-            data = filteredComplex.map(r => ({
-                'Дата': formatDate(r.completedAt),
-                'Прізвище': r.studentLastName,
-                'Ім\'я': r.studentName,
-                'Місто': r.studentCity,
-                'Посада': r.studentPosition || '—',
-                'Тест': r.complexTestId?.title || 'Видалений',
-                'Кроків': r.steps?.length || 0,
-                'Статус': r.overallPassed ? 'Пройдено' : 'Не здано'
+        } else {
+            data = filterForExport(complexResults).map(r => ({
+                'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
+                'Місто': r.studentCity, 'Посада': r.studentPosition || '—',
+                'Тест': r.complexTestId?.title || 'Видалений', 'Кроків': r.steps?.length || 0,
+                'Статус': r.overallPassed ? 'Пройдено' : 'Не здано',
             }));
         }
-
         const ws = XLSX.utils.json_to_sheet(data);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Results");
+        XLSX.utils.book_append_sheet(wb, ws, 'Results');
         XLSX.writeFile(wb, filename);
     };
 
+    const tabs = [
+        { key: 'desk', icon: '🍽️', label: 'Накриття столу', count: deskResults.length },
+        { key: 'game', icon: '🎮', label: 'Гра (Choice)', count: gameResults.length },
+        { key: 'quiz', icon: '📝', label: 'Квізи', count: quizResults.length },
+        { key: 'complex', icon: '🧩', label: 'Комплексний', count: complexResults.length },
+    ];
+
     return (
-        <div className="test-results-page">
-            <div className="results-page-header">
-                <h2>Результати {isAdminCityOnly ? `(${user.city})` : ''}</h2>
-                <div className="header-actions">
-                    {/* Фільтри для експорту (тільки superadmin) */}
+        <div className="tr-page">
+            {/* Header */}
+            <div className="tr-header">
+                <div className="tr-header-left">
+                    <h2 className="tr-title">
+                        Результати {isAdminCityOnly ? <span className="tr-city-badge">{user.city}</span> : ''}
+                    </h2>
+                </div>
+                <div className="tr-header-right">
                     {user?.role === 'superadmin' && (
-                        <div className="export-filters" style={{ display: 'flex', gap: '0.5rem', marginRight: '1rem' }}>
-                            <select
-                                value={exportCity}
-                                onChange={(e) => setExportCity(e.target.value)}
-                                className="filter-select"
-                                title="Фільтр за містом"
-                            >
+                        <>
+                            <select value={exportCity} onChange={e => setExportCity(e.target.value)} className="tr-select" title="Місто">
                                 <option value="">Всі міста</option>
-                                {cities.map(city => (
-                                    <option key={city._id} value={city.name}>{city.name}</option>
-                                ))}
+                                {cities.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                             </select>
-                            <select
-                                value={exportDays}
-                                onChange={(e) => setExportDays(Number(e.target.value))}
-                                className="filter-select"
-                                title="Період"
-                            >
+                            <select value={exportDays} onChange={e => setExportDays(Number(e.target.value))} className="tr-select" title="Період">
                                 <option value={7}>7 днів</option>
                                 <option value={14}>14 днів</option>
                                 <option value={30}>30 днів</option>
                                 <option value={90}>90 днів</option>
                                 <option value={365}>Рік</option>
                             </select>
-                        </div>
+                        </>
                     )}
-                    <button className="btn-refresh" onClick={exportToExcel} title="Export to Excel">📊 Excel</button>
-                    <button className="btn-refresh" onClick={fetchAll}>🔄 Оновити</button>
+                    <button className="tr-btn" onClick={exportToExcel}>📊 Excel</button>
+                    <button className="tr-btn" onClick={fetchAll}>🔄</button>
                 </div>
             </div>
 
-            <div className="results-tabs">
-                <button className={`tab-btn ${tab === 'desk' ? 'active' : ''}`} onClick={() => setTab('desk')}>
-                    🍽️ Накриття столу
-                    {deskResults.length > 0 && <span className="tab-count">{deskResults.length}</span>}
-                </button>
-                <button className={`tab-btn ${tab === 'game' ? 'active' : ''}`} onClick={() => setTab('game')}>
-                    🎮 Гра (Choice)
-                    {gameResults.length > 0 && <span className="tab-count">{gameResults.length}</span>}
-                </button>
-                <button className={`tab-btn ${tab === 'quiz' ? 'active' : ''}`} onClick={() => setTab('quiz')}>
-                    📝 Квізи
-                    {quizResults.length > 0 && <span className="tab-count">{quizResults.length}</span>}
-                </button>
-                <button className={`tab-btn ${tab === 'complex' ? 'active' : ''}`} onClick={() => setTab('complex')}>
-                    🧩 Комплексний
-                    {complexResults.length > 0 && <span className="tab-count">{complexResults.length}</span>}
-                </button>
+            {/* Tabs */}
+            <div className="tr-tabs">
+                {tabs.map(t => (
+                    <button
+                        key={t.key}
+                        className={`tr-tab ${tab === t.key ? 'active' : ''}`}
+                        onClick={() => { setTab(t.key); setSearch(''); }}
+                    >
+                        <span>{t.icon} {t.label}</span>
+                        {t.count > 0 && <span className="tr-tab-count">{t.count}</span>}
+                    </button>
+                ))}
             </div>
 
+            {/* Stats strip */}
+            {!loading && <StatsStrip items={currentRaw} tab={tab} />}
+
+            {/* Toolbar */}
+            <div className="tr-toolbar">
+                <div className="tr-search-wrap">
+                    <span className="tr-search-icon">🔍</span>
+                    <input
+                        className="tr-search"
+                        placeholder="Пошук за ім'ям або містом..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                    {search && <button className="tr-search-clear" onClick={() => setSearch('')}>✕</button>}
+                </div>
+                <select value={sortOrder} onChange={e => setSortOrder(e.target.value)} className="tr-select">
+                    <option value="newest">Спочатку нові</option>
+                    <option value="oldest">Спочатку старі</option>
+                </select>
+                {filteredTotal.length > 0 && (
+                    <span className="tr-count-label">{filteredTotal.length} записів</span>
+                )}
+            </div>
+
+            {/* Content */}
             {loading ? (
-                <div className="results-loading">Завантаження...</div>
-            ) : tab === 'desk' ? (
-                <div className="results-groups">
-                    {Object.keys(deskGroups).length === 0 ? (
-                        <div className="results-empty">Результатів поки немає</div>
-                    ) : (
-                        Object.entries(deskGroups).map(([name, items]) => (
-                            <DeskGroup key={name} name={name} items={items} onRowClick={r => openDetail('desk', r)} />
-                        ))
-                    )}
+                <div className="tr-loading">
+                    <div className="tr-spinner" />
+                    <span>Завантаження...</span>
                 </div>
-            ) : tab === 'game' ? (
-                <div className="results-groups">
-                    {Object.keys(gameGroups).length === 0 ? (
-                        <div className="results-empty">Результатів поки немає</div>
-                    ) : (
-                        Object.entries(gameGroups).map(([name, items]) => (
-                            <GameGroup key={name} name={name} items={items} onRowClick={r => openDetail('game', r)} />
-                        ))
-                    )}
-                </div>
-            ) : tab === 'quiz' ? (
-                <div className="results-groups">
-                    {Object.keys(quizGroups).length === 0 ? (
-                        <div className="results-empty">Результатів поки немає</div>
-                    ) : (
-                        Object.entries(quizGroups).map(([name, items]) => (
-                            <QuizGroup key={name} name={name} items={items} onRowClick={r => openDetail('quiz', r)} />
-                        ))
-                    )}
+            ) : Object.keys(currentGroups).length === 0 ? (
+                <div className="tr-empty">
+                    <div className="tr-empty-icon">📭</div>
+                    <div>{search ? 'Нічого не знайдено' : 'Результатів поки немає'}</div>
                 </div>
             ) : (
-                <div className="results-groups">
-                    {Object.keys(complexGroups).length === 0 ? (
-                        <div className="results-empty">Результатів поки немає</div>
-                    ) : (
-                        Object.entries(complexGroups).map(([name, items]) => (
-                            <ComplexGroup key={name} name={name} items={items} onRowClick={r => openDetail('complex', r)} />
-                        ))
-                    )}
+                <div className="tr-groups">
+                    {tab === 'desk' && Object.entries(deskGroups).map(([name, items]) => {
+                        const passed = items.filter(r => r.passed).length;
+                        const avg = Math.round(items.reduce((s, r) => s + r.percentage, 0) / items.length);
+                        return (
+                            <Group key={name} icon="🍽️" name={name} isOpen={isOpen(name)} onToggle={() => toggleGroup(name)}
+                                chips={<>
+                                    <Chip>{items.length} спроб</Chip>
+                                    <Chip color="green">{passed} здали</Chip>
+                                    <Chip color="blue">~{avg}%</Chip>
+                                </>}
+                            >
+                                {items.map(r => (
+                                    <ResultCard key={r._id} onClick={() => openDetail('desk', r)}
+                                        passed={r.passed}
+                                        avatarText={initials(r.studentLastName, r.studentName)}
+                                        name={`${r.studentLastName} ${r.studentName}`}
+                                        sub={r.studentPosition || '—'}
+                                        city={r.studentCity}
+                                        date={formatDate(r.completedAt)}
+                                        score={<>
+                                            <strong className={r.passed ? 'clr-green' : 'clr-red'}>{r.percentage}%</strong>
+                                            <span className={`tr-pill ${r.passed ? 'pass' : 'fail'}`}>{r.passed ? 'Здано' : 'Не здано'}</span>
+                                        </>}
+                                    />
+                                ))}
+                            </Group>
+                        );
+                    })}
+
+                    {tab === 'game' && Object.entries(gameGroups).map(([name, items]) => {
+                        const wins = items.filter(r => r.isWin).length;
+                        return (
+                            <Group key={name} icon="🎮" name={name} isOpen={isOpen(name)} onToggle={() => toggleGroup(name)}
+                                chips={<>
+                                    <Chip>{items.length} проходжень</Chip>
+                                    <Chip color="green">{wins} перемог</Chip>
+                                    <Chip color="red">{items.length - wins} поразок</Chip>
+                                </>}
+                            >
+                                {items.map(r => (
+                                    <ResultCard key={r._id} onClick={() => openDetail('game', r)}
+                                        passed={r.isWin}
+                                        avatarText={initials(r.playerLastName, r.playerName)}
+                                        name={`${r.playerLastName} ${r.playerName}`}
+                                        sub={r.playerPosition || '—'}
+                                        city={r.playerCity}
+                                        date={formatDate(r.completedAt)}
+                                        extra={<span className="tr-ending">{r.endingTitle || '—'}</span>}
+                                        score={<span className={`tr-pill ${r.isWin ? 'pass' : 'fail'}`}>{r.isWin ? 'Перемога' : 'Поразка'}</span>}
+                                    />
+                                ))}
+                            </Group>
+                        );
+                    })}
+
+                    {tab === 'quiz' && Object.entries(quizGroups).map(([name, items]) => {
+                        const passed = items.filter(r => r.passed).length;
+                        const avg = Math.round(items.reduce((s, r) => s + r.percentage, 0) / items.length);
+                        return (
+                            <Group key={name} icon="📝" name={name} isOpen={isOpen(name)} onToggle={() => toggleGroup(name)}
+                                chips={<>
+                                    <Chip>{items.length} спроб</Chip>
+                                    <Chip color="green">{passed} здали</Chip>
+                                    <Chip color="blue">~{avg}%</Chip>
+                                </>}
+                            >
+                                {items.map(r => (
+                                    <ResultCard key={r._id} onClick={() => openDetail('quiz', r)}
+                                        passed={r.passed}
+                                        avatarText={initials(r.studentLastName, r.studentName)}
+                                        name={`${r.studentLastName} ${r.studentName}`}
+                                        sub={r.studentPosition || '—'}
+                                        city={r.studentCity}
+                                        date={formatDate(r.completedAt)}
+                                        score={<>
+                                            <strong className={r.passed ? 'clr-green' : 'clr-red'}>{r.percentage}%</strong>
+                                            <span className={`tr-pill ${r.passed ? 'pass' : 'fail'}`}>{r.passed ? 'Здано' : 'Не здано'}</span>
+                                        </>}
+                                    />
+                                ))}
+                            </Group>
+                        );
+                    })}
+
+                    {tab === 'complex' && Object.entries(complexGroups).map(([name, items]) => {
+                        const passed = items.filter(r => r.overallPassed).length;
+                        return (
+                            <Group key={name} icon="🧩" name={name} isOpen={isOpen(name)} onToggle={() => toggleGroup(name)}
+                                chips={<>
+                                    <Chip>{items.length} проходжень</Chip>
+                                    <Chip color="green">{passed} пройшли</Chip>
+                                    <Chip color="red">{items.length - passed} провалено</Chip>
+                                </>}
+                            >
+                                {items.map(r => (
+                                    <ResultCard key={r._id} onClick={() => openDetail('complex', r)}
+                                        passed={r.overallPassed}
+                                        avatarText={initials(r.studentLastName, r.studentName)}
+                                        name={`${r.studentLastName} ${r.studentName}`}
+                                        sub={r.studentPosition || '—'}
+                                        city={r.studentCity}
+                                        date={formatDate(r.completedAt)}
+                                        extra={<span className="tr-steps-count">{r.steps?.length || 0} кроків</span>}
+                                        score={<span className={`tr-pill ${r.overallPassed ? 'pass' : 'fail'}`}>{r.overallPassed ? 'Пройдено' : 'Не здано'}</span>}
+                                    />
+                                ))}
+                            </Group>
+                        );
+                    })}
                 </div>
             )}
 
@@ -764,9 +723,9 @@ const TestResults = ({ user }) => {
                 onClose={closeDetail}
                 title={
                     detailType === 'desk' ? '🍽️ Деталі сервірування' :
-                        detailType === 'game' ? '🎮 Деталі гри' :
-                            detailType === 'quiz' ? '📝 Деталі квізу' :
-                                '🧩 Деталі комплексного тесту'
+                    detailType === 'game' ? '🎮 Деталі гри' :
+                    detailType === 'quiz' ? '📝 Деталі квізу' :
+                    '🧩 Деталі комплексного тесту'
                 }
             >
                 {detailType === 'desk' && detailItem && <DeskDetail item={detailItem} />}
@@ -777,5 +736,9 @@ const TestResults = ({ user }) => {
         </div>
     );
 };
+
+const Chip = ({ children, color }) => (
+    <span className={`tr-chip ${color || ''}`}>{children}</span>
+);
 
 export default TestResults;

@@ -4,7 +4,10 @@
       "Bash(node:*)",
       "Bash(npm test:*)",
       "Bash(python3:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(ssh:*)",
+      "Bash(sshpass:*)",
+      "Bash(plink:*)"
     ]
   }
 }
