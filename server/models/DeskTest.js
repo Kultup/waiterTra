@@ -7,6 +7,7 @@ const deskTestSchema = new mongoose.Schema({
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     targetCity: { type: String, default: '' },
     city: { type: String, default: '' }, // legacy
+    description: { type: String, default: '' },
     timeLimit: { type: Number, default: 300 },
     isActive: { type: Boolean, default: true },
     isUsed: { type: Boolean, default: false },

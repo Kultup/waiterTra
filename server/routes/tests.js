@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const DeskTest = require('../models/DeskTest');
+const DeskTemplate = require('../models/DeskTemplate');
 const MultiDeskTest = require('../models/MultiDeskTest');
 const TestResult = require('../models/TestResult');
 const PageView = require('../models/PageView');
@@ -251,9 +252,11 @@ router.post('/', auth, async (req, res) => {
   }
   try {
     const hash = crypto.randomBytes(16).toString('hex');
+    const template = await DeskTemplate.findById(templateId);
     const test = new DeskTest({
       templateId,
       templateName: templateName || 'Шаблон',
+      description: template?.description || '',
       hash,
       ownerId: req.user._id,
       targetCity: req.body.targetCity || ''

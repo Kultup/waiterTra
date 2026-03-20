@@ -175,6 +175,11 @@ const StudentTest = () => {
                 <div className="registration-card">
                     <h2>Реєстрація на тест</h2>
                     <p>Шаблон: <strong>{testData.templateId.name}</strong></p>
+                    {(testData.description || testData.templateId?.description) && (
+                        <div style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '10px', padding: '0.75rem 1rem', margin: '0.5rem 0', fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.4 }}>
+                            📋 <strong>Завдання:</strong> {testData.description || testData.templateId.description}
+                        </div>
+                    )}
                     <form onSubmit={handleRegister}>
                         <div className="form-group">
                             <label>Ім'я</label>
@@ -244,6 +249,11 @@ const StudentTest = () => {
                 <div className="header-info">
                     <h1>🍽️ {testData.templateId.name}</h1>
                     <p>{studentInfo.firstName} {studentInfo.lastName} · {studentInfo.city} ({studentInfo.position})</p>
+                    {(testData.description || testData.templateId?.description) && (
+                        <div style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '10px', padding: '0.6rem 1rem', marginTop: '0.4rem', fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.4 }}>
+                            📋 {testData.description || testData.templateId.description}
+                        </div>
+                    )}
                 </div>
                 <div className="header-actions">
                     {timeLeft !== null && !testResult && (

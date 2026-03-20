@@ -196,7 +196,7 @@
 
 .square-desk {
     width: 100%;
-    max-width: 500px;
+    max-width: 800px;
     aspect-ratio: 1 / 1;
     background: rgba(255, 255, 255, 0.04);
     backdrop-filter: blur(15px);

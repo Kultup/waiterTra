@@ -19,6 +19,7 @@ const deskTemplateSchema = new mongoose.Schema({
     targetCity: { type: String, default: '' }, // використовується в роутах
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     items: [deskItemSchema],
+    description: { type: String, default: '' },
     createdAt: { type: Date, default: Date.now }
 });
 

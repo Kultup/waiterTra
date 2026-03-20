@@ -30,6 +30,7 @@ const VirtualDesk = () => {
     const [editingTemplateId, setEditingTemplateId] = useState(null);
     const [templateName, setTemplateName] = useState('');
     const [timeLimit, setTimeLimit] = useState(0);
+    const [description, setDescription] = useState('');
     const [targetCity, setTargetCity] = useState('');
     const [cities, setCities] = useState([]);
     const [filterCity, setFilterCity] = useState('');
@@ -147,11 +148,12 @@ const VirtualDesk = () => {
                         x, y, type, width: width || 100, height: height || 100
                     })),
                     timeLimit,
+                    description,
                     targetCity: user?.role === 'superadmin' ? targetCity : undefined
                 };
-                
+
                 await axios.put(`${API_URL}/templates/${editingTemplateId}`, payload, config);
-                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
+                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setDescription(''); setTargetCity('');
                 fetchTemplates();
             } catch (e) {
                 console.error(e);
@@ -162,6 +164,7 @@ const VirtualDesk = () => {
 
         setTemplateName('');
         setTimeLimit(0);
+        setDescription('');
         setTargetCity('');
         setModalConfig({
             show: true,
@@ -188,11 +191,12 @@ const VirtualDesk = () => {
                         x, y, type, width: width || 100, height: height || 100
                     })),
                     timeLimit,
+                    description,
                     targetCity: user?.role === 'superadmin' ? targetCity : undefined
                 };
                 await axios.post(`${API_URL}/templates`, payload, config);
-                
-                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
+
+                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setDescription(''); setTargetCity('');
                 fetchTemplates();
             } else if (type === 'load' || type === 'edit') {
                 const template = data;
@@ -200,6 +204,7 @@ const VirtualDesk = () => {
                     setEditingTemplateId(template._id);
                     setTemplateName(template.templateName || template.name || '');
                     setTimeLimit(template.timeLimit || 0);
+                    setDescription(template.description || '');
                     setTargetCity(template.targetCity || '');
                 } else {
                     setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
@@ -360,7 +365,13 @@ const VirtualDesk = () => {
                                     style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', fontSize: '1rem', width: '80px' }}
                                 />
                             </div>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#aaa' }}>Редагування шаблону — змініть предмети та оновіть</p>
+                            <input
+                                type="text"
+                                value={description}
+                                onChange={e => setDescription(e.target.value)}
+                                placeholder="Завдання для студента (необов'язково)..."
+                                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#ccc', padding: '5px 10px', borderRadius: '5px', fontSize: '0.85rem', width: '100%' }}
+                            />
                         </div>
                     ) : (
                         <>
@@ -394,7 +405,7 @@ const VirtualDesk = () => {
                     )}
                     {editingTemplateId && (
                         <button className="btn-header-ghost btn-cancel-edit" onClick={() => {
-                            setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0);
+                            setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setDescription('');
                         }}>
                             Скасувати
                         </button>
@@ -559,6 +570,16 @@ const VirtualDesk = () => {
                                 onChange={e => setTemplateName(e.target.value)}
                                 placeholder="Введіть назву..."
                                 autoFocus
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Завдання (що потрібно зробити)</label>
+                            <textarea
+                                value={description}
+                                onChange={e => setDescription(e.target.value)}
+                                placeholder="Наприклад: Накрийте стіл на 2 персони для вечері..."
+                                rows={3}
+                                style={{ resize: 'vertical' }}
                             />
                         </div>
                         <div className="form-group">

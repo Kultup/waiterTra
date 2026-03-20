@@ -13,6 +13,43 @@ const formatDate = (dateStr) =>
 const initials = (...parts) =>
     parts.filter(Boolean).map(s => s[0]?.toUpperCase()).join('');
 
+// ── Editable city field ───────────────────────────────────────────────────────
+
+const EditableCity = ({ value, cities, onSave }) => {
+    const [editing, setEditing] = useState(false);
+    const [selected, setSelected] = useState(value || '');
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = async () => {
+        if (!selected.trim() || selected === value) { setEditing(false); return; }
+        setSaving(true);
+        try {
+            await onSave(selected.trim());
+            setEditing(false);
+        } catch { /* error handled in parent */ }
+        setSaving(false);
+    };
+
+    if (!editing) {
+        return (
+            <span className="tr-editable-city" onClick={() => setEditing(true)} title="Натисніть щоб змінити місто">
+                {value || '—'} <span className="tr-edit-icon">✏️</span>
+            </span>
+        );
+    }
+
+    return (
+        <span className="tr-city-editor">
+            <select value={selected} onChange={e => setSelected(e.target.value)} className="tr-city-select" autoFocus>
+                <option value="">Оберіть місто</option>
+                {cities.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+            </select>
+            <button className="tr-city-save" onClick={handleSave} disabled={saving}>{saving ? '...' : '✓'}</button>
+            <button className="tr-city-cancel" onClick={() => { setSelected(value || ''); setEditing(false); }}>✕</button>
+        </span>
+    );
+};
+
 // ── Avatar ────────────────────────────────────────────────────────────────────
 
 const Avatar = ({ text, passed }) => (
@@ -47,7 +84,7 @@ const DetailModal = ({ show, onClose, children, title }) => {
 
 // ── Desk detail ──────────────────────────────────────────────────────────────
 
-const DeskDetail = ({ item }) => {
+const DeskDetail = ({ item, cities, canEdit, onCityChange }) => {
     const wrongItems = (item.userItems || []).filter(i => !i.isCorrect);
     const missingItems = (item.targetItems || []).filter(target =>
         !(item.userItems || []).some(ui => ui.type === target.type && ui.isCorrect)
@@ -57,7 +94,9 @@ const DeskDetail = ({ item }) => {
             <div className="tr-detail-meta">
                 <MetaField label="Дата" value={formatDate(item.completedAt)} />
                 <MetaField label="Ім'я" value={`${item.studentLastName} ${item.studentName}`} />
-                <MetaField label="Місто" value={item.studentCity} />
+                <MetaField label="Місто" value={canEdit
+                    ? <EditableCity value={item.studentCity} cities={cities} onSave={onCityChange} />
+                    : item.studentCity} />
                 <MetaField label="Посада" value={item.studentPosition || '—'} />
                 <MetaField label="Шаблон" value={item.templateName} span={2} />
             </div>
@@ -93,13 +132,15 @@ const DeskDetail = ({ item }) => {
 
 // ── Game detail ──────────────────────────────────────────────────────────────
 
-const GameDetail = ({ item }) => (
+const GameDetail = ({ item, cities, canEdit, onCityChange }) => (
     <div className="tr-detail">
         <div className="tr-detail-meta">
             <MetaField label="Дата" value={formatDate(item.completedAt)} />
-            <MetaField label="Ім'я" value={`${item.playerLastName} ${item.playerName}`} />
-            <MetaField label="Місто" value={item.playerCity} />
-            <MetaField label="Посада" value={item.playerPosition || '—'} />
+            <MetaField label="Ім'я" value={`${item.playerLastName || item.studentLastName} ${item.playerName || item.studentName}`} />
+            <MetaField label="Місто" value={canEdit
+                ? <EditableCity value={item.playerCity || item.city} cities={cities} onSave={onCityChange} />
+                : (item.playerCity || item.city)} />
+            <MetaField label="Посада" value={item.playerPosition || item.position || '—'} />
             <MetaField label="Сценарій" value={item.scenarioTitle} />
             <MetaField label="Кінцівка" value={item.endingTitle || '—'} />
         </div>
@@ -172,12 +213,14 @@ const QuizAnswersList = ({ answers }) => (
     </ErrorSection>
 );
 
-const QuizDetail = ({ item }) => (
+const QuizDetail = ({ item, cities, canEdit, onCityChange }) => (
     <div className="tr-detail">
         <div className="tr-detail-meta">
             <MetaField label="Дата" value={formatDate(item.completedAt)} />
             <MetaField label="Ім'я" value={`${item.studentLastName} ${item.studentName}`} />
-            <MetaField label="Місто" value={item.studentCity} />
+            <MetaField label="Місто" value={canEdit
+                ? <EditableCity value={item.studentCity} cities={cities} onSave={onCityChange} />
+                : item.studentCity} />
             <MetaField label="Посада" value={item.studentPosition || '—'} />
             <MetaField label="Квіз" value={item.quizId?.title || 'Видалений квіз'} span={2} />
         </div>
@@ -193,14 +236,16 @@ const QuizDetail = ({ item }) => (
 
 // ── Complex detail ────────────────────────────────────────────────────────────
 
-const ComplexDetail = ({ item }) => {
+const ComplexDetail = ({ item, cities, canEdit, onCityChange }) => {
     const [expanded, setExpanded] = useState(null);
     return (
         <div className="tr-detail">
             <div className="tr-detail-meta">
                 <MetaField label="Дата" value={formatDate(item.completedAt)} />
                 <MetaField label="Ім'я" value={`${item.studentLastName} ${item.studentName}`} />
-                <MetaField label="Місто" value={item.studentCity} />
+                <MetaField label="Місто" value={canEdit
+                    ? <EditableCity value={item.studentCity} cities={cities} onSave={onCityChange} />
+                    : item.studentCity} />
                 <MetaField label="Посада" value={item.studentPosition || '—'} />
                 <MetaField label="Тест" value={item.complexTestId?.title || 'Видалений тест'} span={2} />
             </div>
@@ -373,8 +418,8 @@ const TestResults = ({ user }) => {
     const [collapsed, setCollapsed] = useState({});
     const [sortOrder, setSortOrder] = useState('newest');
 
-    const [exportCity, setExportCity] = useState('');
-    const [exportDays, setExportDays] = useState(30);
+    const [filterCity, setFilterCity] = useState('');
+    const [filterDays, setFilterDays] = useState(0);
     const [cities, setCities] = useState([]);
 
     const [detailItem, setDetailItem] = useState(null);
@@ -422,89 +467,121 @@ const TestResults = ({ user }) => {
     const openDetail = (type, item) => { setDetailType(type); setDetailItem(item); };
     const closeDetail = () => { setDetailItem(null); setDetailType(null); };
 
+    const canEditCity = ['superadmin', 'admin', 'trainer'].includes(user?.role);
+
+    const updateCity = async (type, id, newCity) => {
+        const token = localStorage.getItem('token');
+        const config = { headers: { Authorization: `Bearer ${token}` } };
+        const endpoints = {
+            desk: `${API_URL}/test-results/${id}/city`,
+            game: `${API_URL}/game-results/${id}/city`,
+            quiz: `${API_URL}/quiz/results/${id}/city`,
+            complex: `${API_URL}/complex-tests/results/${id}/city`,
+        };
+        await axios.patch(endpoints[type], { city: newCity }, config);
+        // Update local state
+        const cityField = type === 'game' ? 'city' : 'studentCity';
+        const updateItem = (list) => list.map(r =>
+            r._id === id ? { ...r, [cityField]: newCity, ...(type !== 'game' ? { city: newCity } : {}) } : r
+        );
+        if (type === 'desk') setDeskResults(prev => updateItem(prev));
+        if (type === 'game') setGameResults(prev => updateItem(prev));
+        if (type === 'quiz') setQuizResults(prev => updateItem(prev));
+        if (type === 'complex') setComplexResults(prev => updateItem(prev));
+        // Update detail modal item
+        if (detailItem?._id === id) {
+            setDetailItem(prev => ({ ...prev, [cityField]: newCity, ...(type !== 'game' ? { city: newCity } : {}) }));
+        }
+    };
+
     const toggleGroup = (name) =>
         setCollapsed(prev => ({ ...prev, [name]: !prev[name] }));
 
     const isOpen = (name) => collapsed[name] !== true;
 
-    // Current tab raw results
-    const currentRaw = tab === 'desk' ? deskResults
-        : tab === 'game' ? gameResults
-        : tab === 'quiz' ? quizResults
-        : complexResults;
-
-    // Search filter
-    const searchLower = search.toLowerCase();
-    const matchSearch = (r) => {
-        if (!searchLower) return true;
-        const name = `${r.studentLastName || r.playerLastName || ''} ${r.studentName || r.playerName || ''}`.toLowerCase();
-        const city = (r.studentCity || r.playerCity || '').toLowerCase();
-        return name.includes(searchLower) || city.includes(searchLower);
+    // ── Universal filter (city + period + search) ──
+    const applyFilters = (list) => {
+        let f = list;
+        if (filterCity) {
+            f = f.filter(r => (r.studentCity || r.playerCity) === filterCity);
+        }
+        if (filterDays > 0) {
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - filterDays);
+            f = f.filter(r => new Date(r.completedAt) >= cutoff);
+        }
+        if (search) {
+            const q = search.toLowerCase();
+            f = f.filter(r => {
+                const name = `${r.studentLastName || r.playerLastName || ''} ${r.studentName || r.playerName || ''}`.toLowerCase();
+                const city = (r.studentCity || r.playerCity || '').toLowerCase();
+                return name.includes(q) || city.includes(q);
+            });
+        }
+        return f;
     };
 
-    // Sort
-    const sorted = (arr) => [...arr].sort((a, b) => {
+    const sortList = (arr) => [...arr].sort((a, b) => {
         const da = new Date(a.completedAt), db = new Date(b.completedAt);
         return sortOrder === 'newest' ? db - da : da - db;
     });
 
+    // Filtered + sorted data for each type
+    const filteredDesk = sortList(applyFilters(deskResults));
+    const filteredGame = sortList(applyFilters(gameResults));
+    const filteredQuiz = sortList(applyFilters(quizResults));
+    const filteredComplex = sortList(applyFilters(complexResults));
+
+    const currentFiltered = tab === 'desk' ? filteredDesk
+        : tab === 'game' ? filteredGame
+        : tab === 'quiz' ? filteredQuiz
+        : filteredComplex;
+
     // Group by
     const makeGroups = (arr, keyFn) =>
-        arr.filter(matchSearch).reduce((acc, item) => {
+        arr.reduce((acc, item) => {
             const k = keyFn(item);
             if (!acc[k]) acc[k] = [];
             acc[k].push(item);
             return acc;
         }, {});
 
-    const deskGroups = makeGroups(sorted(deskResults), r => r.templateName || 'Без назви');
-    const gameGroups = makeGroups(sorted(gameResults), r => r.scenarioTitle || 'Без назви');
-    const quizGroups = makeGroups(sorted(quizResults), r => r.quizId?.title || 'Видалений квіз');
-    const complexGroups = makeGroups(sorted(complexResults), r => r.complexTestId?.title || 'Видалений тест');
+    const deskGroups = makeGroups(filteredDesk, r => r.templateName || 'Без назви');
+    const gameGroups = makeGroups(filteredGame, r => r.scenarioTitle || 'Без назви');
+    const quizGroups = makeGroups(filteredQuiz, r => r.quizId?.title || 'Видалений квіз');
+    const complexGroups = makeGroups(filteredComplex, r => r.complexTestId?.title || 'Видалений тест');
 
     const currentGroups = tab === 'desk' ? deskGroups
         : tab === 'game' ? gameGroups
         : tab === 'quiz' ? quizGroups
         : complexGroups;
 
-    const filteredTotal = Object.values(currentGroups).flat();
-
-    // Export
-    const filterForExport = (list) => {
-        let f = [...list];
-        if (user?.role === 'superadmin' && exportCity)
-            f = f.filter(r => (r.studentCity || r.playerCity) === exportCity);
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - exportDays);
-        return f.filter(r => new Date(r.completedAt) >= cutoff);
-    };
-
     const exportToExcel = () => {
         const dateStr = new Date().toISOString().split('T')[0];
-        const filename = `results_${exportCity || 'all'}_${exportDays}days_${dateStr}.xlsx`;
+        const filename = `results_${filterCity || 'all'}_${filterDays || 'all'}d_${dateStr}.xlsx`;
         let data = [];
         if (tab === 'desk') {
-            data = filterForExport(deskResults).map(r => ({
+            data = filteredDesk.map(r => ({
                 'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
                 'Місто': r.studentCity, 'Посада': r.studentPosition || '—', 'Шаблон': r.templateName,
                 'Результат': `${r.score}/${r.total}`, 'Відсоток': `${r.percentage}%`,
                 'Статус': r.passed ? 'Пройдено' : 'Не здано',
             }));
         } else if (tab === 'game') {
-            data = filterForExport(gameResults).map(r => ({
+            data = filteredGame.map(r => ({
                 'Дата': formatDate(r.completedAt), 'Прізвище': r.playerLastName, 'Ім\'я': r.playerName,
                 'Місто': r.playerCity, 'Посада': r.playerPosition || '—', 'Сценарій': r.scenarioTitle,
                 'Кінцівка': r.endingTitle || '—', 'Результат': r.isWin ? 'Перемога' : 'Поразка',
             }));
         } else if (tab === 'quiz') {
-            data = filterForExport(quizResults).map(r => ({
+            data = filteredQuiz.map(r => ({
                 'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
                 'Місто': r.studentCity, 'Посада': r.studentPosition || '—',
                 'Квіз': r.quizId?.title || 'Видалений', 'Бали': `${r.score}/${r.total}`,
                 'Відсоток': `${r.percentage}%`,
             }));
         } else {
-            data = filterForExport(complexResults).map(r => ({
+            data = filteredComplex.map(r => ({
                 'Дата': formatDate(r.completedAt), 'Прізвище': r.studentLastName, 'Ім\'я': r.studentName,
                 'Місто': r.studentCity, 'Посада': r.studentPosition || '—',
                 'Тест': r.complexTestId?.title || 'Видалений', 'Кроків': r.steps?.length || 0,
@@ -518,10 +595,10 @@ const TestResults = ({ user }) => {
     };
 
     const tabs = [
-        { key: 'desk', icon: '🍽️', label: 'Накриття столу', count: deskResults.length },
-        { key: 'game', icon: '🎮', label: 'Гра (Choice)', count: gameResults.length },
-        { key: 'quiz', icon: '📝', label: 'Квізи', count: quizResults.length },
-        { key: 'complex', icon: '🧩', label: 'Комплексний', count: complexResults.length },
+        { key: 'desk', icon: '🍽️', label: 'Накриття столу', count: filteredDesk.length },
+        { key: 'game', icon: '🎮', label: 'Гра (Choice)', count: filteredGame.length },
+        { key: 'quiz', icon: '📝', label: 'Квізи', count: filteredQuiz.length },
+        { key: 'complex', icon: '🧩', label: 'Комплексний', count: filteredComplex.length },
     ];
 
     return (
@@ -534,13 +611,14 @@ const TestResults = ({ user }) => {
                     </h2>
                 </div>
                 <div className="tr-header-right">
-                    {user?.role === 'superadmin' && (
+                    {['superadmin', 'admin', 'trainer'].includes(user?.role) && (
                         <>
-                            <select value={exportCity} onChange={e => setExportCity(e.target.value)} className="tr-select" title="Місто">
+                            <select value={filterCity} onChange={e => setFilterCity(e.target.value)} className="tr-select" title="Місто">
                                 <option value="">Всі міста</option>
                                 {cities.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                             </select>
-                            <select value={exportDays} onChange={e => setExportDays(Number(e.target.value))} className="tr-select" title="Період">
+                            <select value={filterDays} onChange={e => setFilterDays(Number(e.target.value))} className="tr-select" title="Період">
+                                <option value={0}>Весь час</option>
                                 <option value={7}>7 днів</option>
                                 <option value={14}>14 днів</option>
                                 <option value={30}>30 днів</option>
@@ -569,7 +647,7 @@ const TestResults = ({ user }) => {
             </div>
 
             {/* Stats strip */}
-            {!loading && <StatsStrip items={currentRaw} tab={tab} />}
+            {!loading && <StatsStrip items={currentFiltered} tab={tab} />}
 
             {/* Toolbar */}
             <div className="tr-toolbar">
@@ -587,8 +665,8 @@ const TestResults = ({ user }) => {
                     <option value="newest">Спочатку нові</option>
                     <option value="oldest">Спочатку старі</option>
                 </select>
-                {filteredTotal.length > 0 && (
-                    <span className="tr-count-label">{filteredTotal.length} записів</span>
+                {currentFiltered.length > 0 && (
+                    <span className="tr-count-label">{currentFiltered.length} записів</span>
                 )}
             </div>
 
@@ -728,10 +806,10 @@ const TestResults = ({ user }) => {
                     '🧩 Деталі комплексного тесту'
                 }
             >
-                {detailType === 'desk' && detailItem && <DeskDetail item={detailItem} />}
-                {detailType === 'game' && detailItem && <GameDetail item={detailItem} />}
-                {detailType === 'quiz' && detailItem && <QuizDetail item={detailItem} />}
-                {detailType === 'complex' && detailItem && <ComplexDetail item={detailItem} />}
+                {detailType === 'desk' && detailItem && <DeskDetail item={detailItem} cities={cities} canEdit={canEditCity} onCityChange={c => updateCity('desk', detailItem._id, c)} />}
+                {detailType === 'game' && detailItem && <GameDetail item={detailItem} cities={cities} canEdit={canEditCity} onCityChange={c => updateCity('game', detailItem._id, c)} />}
+                {detailType === 'quiz' && detailItem && <QuizDetail item={detailItem} cities={cities} canEdit={canEditCity} onCityChange={c => updateCity('quiz', detailItem._id, c)} />}
+                {detailType === 'complex' && detailItem && <ComplexDetail item={detailItem} cities={cities} canEdit={canEditCity} onCityChange={c => updateCity('complex', detailItem._id, c)} />}
             </DetailModal>
         </div>
     );

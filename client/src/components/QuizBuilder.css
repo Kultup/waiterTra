@@ -433,3 +433,19 @@ select.qb-input {
     background: #1a1a1a;
     color: #fff;
 }
+
+/* ── QuizPlay mobile ─────────────────────────────────── */
+@media (max-width: 600px) {
+    .student-quiz-view {
+        padding: 1rem !important;
+    }
+    .student-quiz-view .q-image-container img {
+        max-height: 250px !important;
+    }
+    .student-quiz-view .qb-options-grid {
+        grid-template-columns: 1fr;
+    }
+    .student-quiz-view .qb-question-card {
+        margin-bottom: 1.5rem !important;
+    }
+}

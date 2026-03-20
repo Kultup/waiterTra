@@ -113,7 +113,8 @@ const ComplexTestBuilder = () => {
             fetchData();
         } catch (e) {
             console.error('Save error:', e);
-            alert('Помилка при збереженні');
+            const msg = e.response?.data?.error || e.message || 'Невідома помилка';
+            alert(`Помилка при збереженні: ${msg}`);
         }
     };
 

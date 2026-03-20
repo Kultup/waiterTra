@@ -531,6 +531,83 @@
 
 .tr-empty-icon { font-size: 2.5rem; opacity: 0.5; }
 
+/* ── Editable city ───────────────────────────────────────────────────────── */
+
+.tr-editable-city {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.15rem 0.4rem;
+    margin: -0.15rem -0.4rem;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+
+.tr-editable-city:hover {
+    background: rgba(56, 189, 248, 0.1);
+}
+
+.tr-edit-icon {
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.tr-editable-city:hover .tr-edit-icon {
+    opacity: 1;
+}
+
+.tr-city-editor {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.tr-city-select {
+    padding: 0.3rem 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--accent-blue);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 0.85rem;
+    outline: none;
+    max-width: 160px;
+}
+
+.tr-city-select option {
+    background: #1e293b;
+    color: #fff;
+}
+
+.tr-city-save,
+.tr-city-cancel {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.tr-city-save {
+    background: rgba(74, 222, 128, 0.15);
+    color: #4ade80;
+}
+
+.tr-city-save:hover { background: rgba(74, 222, 128, 0.3); }
+
+.tr-city-cancel {
+    background: rgba(248, 113, 113, 0.12);
+    color: #f87171;
+}
+
+.tr-city-cancel:hover { background: rgba(248, 113, 113, 0.25); }
+
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 
 .tr-overlay {
