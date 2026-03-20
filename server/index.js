@@ -71,6 +71,7 @@ const cityRouter = require('./routes/city');
 const statsRouter = require('./routes/stats');
 const analyticsRouter = require('./routes/analytics');
 const dishRouter = require('./routes/dish');
+const aiRouter = require('./routes/ai');
 
 app.use('/api/auth', authRouter);
 app.use('/api/desk-items', deskRouter);
@@ -87,6 +88,7 @@ app.use('/api/cities', cityRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/dishes', dishRouter);
+app.use('/api/ai', aiRouter);
 
 // Serve React build in production
 if (process.env.NODE_ENV === 'production') {

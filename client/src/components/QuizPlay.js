@@ -367,7 +367,7 @@ const QuizPlay = () => {
                             ))}
                         </div>
 
-                        {revealed && q.explanation && (
+                        {revealed && q.explanation && selectedIdx !== correctIdx && (
                             <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '0.75rem', fontSize: '0.9rem', color: '#e2e8f0' }}>
                                 💡 {q.explanation}
                             </div>

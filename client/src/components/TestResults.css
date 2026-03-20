@@ -986,3 +986,35 @@
     .tr-card-city { display: none; }
     .tr-group-chips { display: none; }
 }
+
+/* ── AI Analyze ─────────────────────────────────────── */
+.tr-btn-ai {
+    background: linear-gradient(135deg, #8b5cf6, #6366f1) !important;
+    color: #fff !important;
+    font-weight: 600;
+}
+.tr-btn-ai:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+}
+.tr-btn-ai:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+.tr-ai-content {
+    min-height: 200px;
+}
+.tr-ai-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem 0;
+    color: #a78bfa;
+}
+.tr-ai-text {
+    color: #e2e8f0;
+    line-height: 1.7;
+    font-size: 0.92rem;
+    white-space: pre-wrap;
+}

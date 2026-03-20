@@ -25,6 +25,10 @@ const Dashboard = ({ user }) => {
     const [cities, setCities] = useState([]);
     const [period, setPeriod] = useState(30);
 
+    const [aiAnalysis, setAiAnalysis] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiOpen, setAiOpen] = useState(false);
+
     const isAdminCityOnly = user?.role !== 'superadmin' && user?.city;
 
     useEffect(() => {
@@ -87,6 +91,26 @@ const Dashboard = ({ user }) => {
         }
     };
 
+    const handleAiAnalyze = async () => {
+        setAiLoading(true);
+        setAiOpen(true);
+        setAiAnalysis('');
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/ai/analyze`, {
+                mode: 'dashboard',
+                city: selectedCity || undefined,
+                days: period || undefined,
+                tab: 'all',
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            setAiAnalysis(res.data.analysis);
+        } catch (err) {
+            setAiAnalysis('Помилка: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     if (loading) return <div className="dashboard-loading">Завантаження статистики...</div>;
 
     return (
@@ -108,8 +132,8 @@ const Dashboard = ({ user }) => {
                             ))}
                         </select>
                     )}
-                    <select 
-                        value={period} 
+                    <select
+                        value={period}
                         onChange={(e) => setPeriod(Number(e.target.value))}
                         className="filter-select"
                     >
@@ -118,6 +142,9 @@ const Dashboard = ({ user }) => {
                         <option value={30}>30 днів</option>
                         <option value={90}>90 днів</option>
                     </select>
+                    <button className="ai-analyze-btn" onClick={handleAiAnalyze} disabled={aiLoading}>
+                        {aiLoading ? '⏳ Аналіз...' : '🤖 AI Аналіз'}
+                    </button>
                 </div>
             </header>
 
@@ -280,6 +307,28 @@ const Dashboard = ({ user }) => {
                     </div>
                 </div>
             </div>
+
+            {/* AI Analysis Modal */}
+            {aiOpen && (
+                <div className="ai-overlay" onClick={() => setAiOpen(false)}>
+                    <div className="ai-modal" onClick={e => e.stopPropagation()}>
+                        <div className="ai-modal-header">
+                            <span>🤖 AI Аналіз</span>
+                            <button className="ai-modal-close" onClick={() => setAiOpen(false)}>✕</button>
+                        </div>
+                        <div className="ai-modal-body">
+                            {aiLoading ? (
+                                <div className="ai-loading">
+                                    <div className="ai-spinner" />
+                                    <p>AI аналізує дані...</p>
+                                </div>
+                            ) : (
+                                <div className="ai-text">{aiAnalysis}</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

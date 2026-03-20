@@ -11,7 +11,8 @@
       "Bash(npx react-scripts:*)",
       "Bash(xargs grep:*)",
       "Bash(grep -r api/ai /c/Users/dpytlyk-da/Desktop/waiterTra/server --include=*.js)",
-      "Bash(grep -r \"GROQ\\\\|groq\\\\|Groq\" /c/Users/dpytlyk-da/Desktop/waiterTra/server --include=*.js)"
+      "Bash(grep -r \"GROQ\\\\|groq\\\\|Groq\" /c/Users/dpytlyk-da/Desktop/waiterTra/server --include=*.js)",
+      "Bash(find /c/Users/dpytlyk-da/Desktop/waiterTra -type f -name *ai*)"
     ]
   }
 }

@@ -57,6 +57,7 @@ const ComplexTestPlay = () => {
     // Quiz state
     const [quizAnswers, setQuizAnswers] = useState({});
     const [currentQuestion, setCurrentQuestion] = useState(0);
+    const [quizRevealed, setQuizRevealed] = useState(false);
     const [quizDone, setQuizDone] = useState(false);
     const [quizResult, setQuizResult] = useState(null);
 
@@ -105,6 +106,7 @@ const ComplexTestPlay = () => {
         setGameEnding(null);
         setQuizAnswers({});
         setCurrentQuestion(0);
+        setQuizRevealed(false);
         setQuizDone(false);
         setQuizResult(null);
 
@@ -199,8 +201,18 @@ const ComplexTestPlay = () => {
 
     // ── Quiz handlers ───────────────────────────────────────
     const handleQuizAnswer = (qIdx, aIdx) => {
-        if (quizDone) return;
+        if (quizDone || quizRevealed) return;
         setQuizAnswers(prev => ({ ...prev, [qIdx]: aIdx }));
+        setQuizRevealed(true);
+    };
+
+    const handleQuizNext = () => {
+        setQuizRevealed(false);
+        if (currentQuestion < step.refData.questions.length - 1) {
+            setCurrentQuestion(q => q + 1);
+        } else {
+            handleQuizSubmit();
+        }
     };
 
     const handleQuizSubmit = () => {
@@ -532,55 +544,68 @@ const ComplexTestPlay = () => {
                             <>
                                 <div className="quiz-progress-bar">
                                     <div className="quiz-progress-fill"
-                                        style={{ width: `${((currentQuestion + 1) / step.refData.questions.length) * 100}%` }} />
+                                        style={{ width: `${((currentQuestion + (quizRevealed ? 1 : 0)) / step.refData.questions.length) * 100}%` }} />
                                 </div>
-                                {step.refData.questions[currentQuestion] && (
-                                    <div className="quiz-question-card">
-                                        <div className="quiz-q-number">
-                                            Питання {currentQuestion + 1} з {step.refData.questions.length}
-                                        </div>
-                                        <div className="quiz-q-text">{step.refData.questions[currentQuestion].text}</div>
-                                        {step.refData.questions[currentQuestion].image && (
-                                            <div className="q-media-container" style={{ marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                                <img
-                                                    className="quiz-q-image"
-                                                    src={step.refData.questions[currentQuestion].image.startsWith('http') ? step.refData.questions[currentQuestion].image : `${API_URL.replace('/api', '')}${step.refData.questions[currentQuestion].image}`}
-                                                    alt="question"
-                                                    style={{ width: '100%', display: 'block' }}
-                                                />
+                                {(() => {
+                                    const q = step.refData.questions[currentQuestion];
+                                    if (!q) return null;
+                                    const selectedIdx = quizAnswers[currentQuestion];
+                                    const correctIdx = q.correctIndex;
+                                    return (
+                                        <div className="quiz-question-card">
+                                            <div className="quiz-q-number">
+                                                Питання {currentQuestion + 1} з {step.refData.questions.length}
                                             </div>
-                                        )}
-                                        {step.refData.questions[currentQuestion].video && (
-                                            <div className="q-media-container" style={{ marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', aspectRatio: '16/9' }}>
-                                                <VideoPlayer url={step.refData.questions[currentQuestion].video} />
-                                            </div>
-                                        )}
-                                        <div className="quiz-options">
-                                            {step.refData.questions[currentQuestion].options.map((opt, oi) => (
-                                                <button key={oi}
-                                                    className={`quiz-option ${quizAnswers[currentQuestion] === oi ? 'selected' : ''}`}
-                                                    onClick={() => handleQuizAnswer(currentQuestion, oi)}>
-                                                    {opt}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <div className="quiz-nav">
-                                            {currentQuestion < step.refData.questions.length - 1 ? (
-                                                <button className="btn-save-template"
-                                                    disabled={quizAnswers[currentQuestion] === undefined}
-                                                    onClick={() => setCurrentQuestion(q => q + 1)}>
-                                                    Далі →
-                                                </button>
-                                            ) : (
-                                                <button className="btn-save-template"
-                                                    disabled={quizAnswers[currentQuestion] === undefined}
-                                                    onClick={handleQuizSubmit}>
-                                                    Перевірити
-                                                </button>
+                                            <div className="quiz-q-text">{q.text}</div>
+                                            {q.image && (
+                                                <div className="q-media-container" style={{ marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center' }}>
+                                                    <img className="quiz-q-image"
+                                                        src={q.image.startsWith('http') ? q.image : `${API_URL.replace('/api', '')}${q.image}`}
+                                                        alt="question"
+                                                        style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain', display: 'block', margin: '0 auto' }} />
+                                                </div>
                                             )}
+                                            {q.video && (
+                                                <div className="q-media-container" style={{ marginBottom: '1rem', borderRadius: '0.5rem', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', aspectRatio: '16/9' }}>
+                                                    <VideoPlayer url={q.video} />
+                                                </div>
+                                            )}
+                                            <div className="quiz-options">
+                                                {q.options.map((opt, oi) => {
+                                                    let cls = 'quiz-option';
+                                                    if (quizRevealed) {
+                                                        if (oi === correctIdx) cls += ' correct';
+                                                        else if (oi === selectedIdx) cls += ' wrong';
+                                                        else cls += ' dimmed';
+                                                    } else if (selectedIdx === oi) {
+                                                        cls += ' selected';
+                                                    }
+                                                    return (
+                                                        <button key={oi} className={cls}
+                                                            onClick={() => handleQuizAnswer(currentQuestion, oi)}
+                                                            style={quizRevealed ? { cursor: 'default' } : {}}>
+                                                            <span>{opt}</span>
+                                                            {quizRevealed && oi === correctIdx && <span style={{ marginLeft: 'auto', fontWeight: 700 }}>✓</span>}
+                                                            {quizRevealed && oi === selectedIdx && oi !== correctIdx && <span style={{ marginLeft: 'auto', fontWeight: 700 }}>✗</span>}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            {quizRevealed && q.explanation && selectedIdx !== correctIdx && (
+                                                <div style={{ marginTop: '0.75rem', padding: '0.6rem 1rem', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '0.75rem', fontSize: '0.9rem', color: '#e2e8f0' }}>
+                                                    💡 {q.explanation}
+                                                </div>
+                                            )}
+                                            <div className="quiz-nav">
+                                                {quizRevealed && (
+                                                    <button className="btn-save-template" onClick={handleQuizNext}>
+                                                        {currentQuestion < step.refData.questions.length - 1 ? 'Далі →' : 'Завершити квіз'}
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
                             </>
                         ) : (
                             <div className="quiz-question-card" style={{ textAlign: 'center' }}>

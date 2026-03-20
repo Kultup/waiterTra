@@ -425,6 +425,10 @@ const TestResults = ({ user }) => {
     const [detailItem, setDetailItem] = useState(null);
     const [detailType, setDetailType] = useState(null);
 
+    const [aiAnalysis, setAiAnalysis] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiModalOpen, setAiModalOpen] = useState(false);
+
     const isAdminCityOnly = user?.role !== 'superadmin' && user?.city;
 
     const filterByCity = (list) => {
@@ -556,6 +560,26 @@ const TestResults = ({ user }) => {
         : tab === 'quiz' ? quizGroups
         : complexGroups;
 
+    const handleAiAnalyze = async () => {
+        setAiLoading(true);
+        setAiModalOpen(true);
+        setAiAnalysis('');
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/ai/analyze`, {
+                mode: 'results',
+                city: filterCity || undefined,
+                days: filterDays || undefined,
+                tab,
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            setAiAnalysis(res.data.analysis);
+        } catch (err) {
+            setAiAnalysis('Помилка аналізу: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     const exportToExcel = () => {
         const dateStr = new Date().toISOString().split('T')[0];
         const filename = `results_${filterCity || 'all'}_${filterDays || 'all'}d_${dateStr}.xlsx`;
@@ -627,6 +651,9 @@ const TestResults = ({ user }) => {
                             </select>
                         </>
                     )}
+                    <button className="tr-btn tr-btn-ai" onClick={handleAiAnalyze} disabled={aiLoading}>
+                        {aiLoading ? '⏳' : '🤖'} AI Аналіз
+                    </button>
                     <button className="tr-btn" onClick={exportToExcel}>📊 Excel</button>
                     <button className="tr-btn" onClick={fetchAll}>🔄</button>
                 </div>
@@ -794,6 +821,24 @@ const TestResults = ({ user }) => {
                     })}
                 </div>
             )}
+
+            {/* AI Modal */}
+            <DetailModal
+                show={aiModalOpen}
+                onClose={() => setAiModalOpen(false)}
+                title="🤖 AI Аналіз результатів"
+            >
+                <div className="tr-ai-content">
+                    {aiLoading ? (
+                        <div className="tr-ai-loading">
+                            <div className="tr-spinner" />
+                            <p>AI аналізує дані...</p>
+                        </div>
+                    ) : (
+                        <div className="tr-ai-text">{aiAnalysis}</div>
+                    )}
+                </div>
+            </DetailModal>
 
             {/* Detail Modal */}
             <DetailModal
