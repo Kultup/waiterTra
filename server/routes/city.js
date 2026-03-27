@@ -46,11 +46,23 @@ router.delete('/:id', auth, async (req, res) => {
     }
 
     try {
-        const filter = { _id: req.params.id };
-        if (req.user.platform) filter.platform = req.user.platform;
+        const id = req.params.id;
+        // Global superadmin (no platform) can delete any city
+        // Platform-scoped superadmin can only delete cities of their platform
+        const filter = { _id: id };
+        if (req.user.platform) {
+            filter.platform = req.user.platform;
+        }
+
         const city = await City.findOneAndDelete(filter);
-        if (!city) return res.status(404).json({ error: 'City not found' });
-        res.json({ message: 'City deleted' });
+        
+        if (!city) {
+            return res.status(404).json({ 
+                error: 'City not found or you don\'t have permission to delete it' 
+            });
+        }
+        
+        res.json({ message: 'City deleted successfully' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

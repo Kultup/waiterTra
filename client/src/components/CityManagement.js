@@ -10,6 +10,7 @@ const CityManagement = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
 
     useEffect(() => {
@@ -56,6 +57,9 @@ const CityManagement = () => {
         const id = confirmModal.idToDelete;
         if (!id) return;
         setConfirmModal({ isOpen: false, idToDelete: null });
+        setDeletingId(id);
+        setError('');
+
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/cities/${id}`, {
@@ -63,7 +67,9 @@ const CityManagement = () => {
             });
             setCities(prev => prev.filter(c => c._id !== id));
         } catch (err) {
-            setError('Не вдалося видалити місто');
+            setError(err.response?.data?.error || 'Не вдалося видалити місто');
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -100,14 +106,15 @@ const CityManagement = () => {
                         <p className="empty-msg">Міст ще не додано</p>
                     ) : (
                         cities.map(city => (
-                            <div key={city._id} className="city-card">
+                            <div key={city._id} className={`city-card ${deletingId === city._id ? 'deleting' : ''}`}>
                                 <span className="city-name">{city.name}</span>
                                 <button
                                     className="btn-delete-city"
                                     onClick={() => handleDeleteClick(city._id)}
                                     title="Видалити"
+                                    disabled={deletingId === city._id}
                                 >
-                                    ×
+                                    {deletingId === city._id ? '...' : '×'}
                                 </button>
                             </div>
                         ))

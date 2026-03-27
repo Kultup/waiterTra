@@ -8,6 +8,7 @@ const Quiz = require('../models/Quiz');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 const { syncStudent } = require('../utils/studentSync');
+const { validateDeskPlacement } = require('../utils/scoring');
 const { buildBaseFilter, buildOwnerQuery, buildResultFilter } = require('../utils/platformFilter');
 
 const crypto = require('crypto');
@@ -218,35 +219,9 @@ router.post('/check-desk-step', async (req, res) => {
         if (!template) return res.status(404).json({ error: 'Template not found' });
 
         const targetItems = template.items;
-        const tolerance = 50;
-        let score = 0;
+        const result = validateDeskPlacement(items, targetItems);
 
-        const validatedItems = items.map(userItem => {
-            const correctMatch = targetItems.find(target =>
-                userItem.type === target.type &&
-                Math.abs(userItem.x - target.x) < tolerance &&
-                Math.abs(userItem.y - target.y) < tolerance
-            );
-            return { ...userItem, isCorrect: !!correctMatch };
-        });
-
-        targetItems.forEach(target => {
-            const found = items.some(userItem =>
-                userItem.type === target.type &&
-                Math.abs(userItem.x - target.x) < tolerance &&
-                Math.abs(userItem.y - target.y) < tolerance
-            );
-            if (found) score++;
-        });
-
-        const total = targetItems.length;
-        const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-        const passed = percentage >= 80;
-
-        // Return ghost items (correct positions) for overlay
-        const ghostItems = targetItems.map(i => ({ type: i.type, name: i.name, icon: i.icon, x: i.x, y: i.y }));
-
-        res.json({ score, total, percentage, passed, validatedItems, ghostItems });
+        res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

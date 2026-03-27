@@ -7,6 +7,7 @@ const TestResult = require('../models/TestResult');
 const PageView = require('../models/PageView');
 const { auth } = require('../middleware/authMiddleware');
 const { syncStudent } = require('../utils/studentSync');
+const { validateDeskPlacement } = require('../utils/scoring');
 const { buildBaseFilter } = require('../utils/platformFilter');
 const router = express.Router();
 
@@ -143,35 +144,21 @@ router.post('/multi/:hash/submit', async (req, res) => {
     test.isUsed = true;
     await test.save();
 
-    const tolerance = 50;
     const stepResults = [];
 
     for (let i = 0; i < test.templateIds.length; i++) {
       const template = test.templateIds[i];
       const userItems = results[i]?.items || [];
       const targetItems = template.items;
-      let score = 0;
-
-      targetItems.forEach(target => {
-        const found = userItems.some(userItem =>
-          userItem.type === target.type &&
-          Math.abs(userItem.x - target.x) < tolerance &&
-          Math.abs(userItem.y - target.y) < tolerance
-        );
-        if (found) score++;
-      });
-
-      const total = targetItems.length;
-      const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-      const passed = percentage >= 80;
+      const { score, total, percentage, passed, validatedItems, ghostItems } = validateDeskPlacement(userItems, targetItems);
 
       stepResults.push({ templateName: template.name, score, total, percentage, passed });
 
       // Also save individual TestResult
       const result = new TestResult({
-        testId: test._id,
+        testId: test._id, // This is the MultiDeskTest ID
         ownerId: test.ownerId,
-        templateName: template.templateName || template.name,
+        templateName: template.name, // Use template.name for the individual step
         studentName: String(studentName).trim(),
         studentLastName: String(studentLastName).trim(),
         studentCity: String(studentCity).trim(),

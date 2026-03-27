@@ -87,6 +87,11 @@
     color: #f87171;
 }
 
+.city-card.deleting {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
 .empty-msg {
     grid-column: 1 / -1;
     text-align: center;
