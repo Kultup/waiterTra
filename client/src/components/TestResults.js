@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import * as XLSX from 'xlsx';
 import API_URL, { getUserPlatform } from '../api';
 import './TestResults.css';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 const formatDate = (dateStr) =>
     new Date(dateStr).toLocaleString('uk-UA', {
@@ -182,7 +183,7 @@ const VideoPlayerMini = ({ url }) => {
     const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
     if (vimeoMatch) return <iframe title="vimeo"
         src={`https://player.vimeo.com/video/${vimeoMatch[1]}`} width="100%" height="100%" frameBorder="0" allowFullScreen />;
-    const src = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}${url}`;
+    const src = resolveAssetUrl(url);
     return <video controls style={{ width: '100%', height: '100%' }}><source src={src} /></video>;
 };
 
@@ -192,7 +193,7 @@ const QuizAnswersList = ({ answers }) => (
             <div key={i} className={`tr-answer ${a.isCorrect ? 'correct' : 'wrong'}`}>
                 <div className="tr-answer-q">Питання {i + 1}: {a.questionText}</div>
                 {a.image && (
-                    <img src={a.image.startsWith('http') ? a.image : `${API_URL.replace('/api', '')}${a.image}`}
+                    <img src={resolveAssetUrl(a.image)}
                         alt="" className="tr-answer-img" />
                 )}
                 {a.video && (

@@ -4,6 +4,7 @@ import API_URL from '../api';
 import ConfirmModal from './ConfirmModal';
 import './DishManagement.css';
 import { useToast } from '../contexts/ToastContext';
+import { isAssetUrl, resolveAssetUrl } from '../utils/assetUrl';
 
 const PRESET_ICONS = [
     '🍽️', '🍷', '🍴', '🔪', '🥄', '☕', '🍲', '🥣',
@@ -147,15 +148,13 @@ const DishManagement = () => {
             className = '',
             rotationValue = 0,
         } = options;
-        const isUrl = iconValue.startsWith('http') || iconValue.startsWith('/uploads');
+        const isUrl = isAssetUrl(iconValue);
         const normalizedRotation = normalizeRotation(rotationValue);
 
         if (isUrl) {
-            const baseUrl = API_URL.replace('/api', '');
-            const fullUrl = iconValue.startsWith('http') ? iconValue : `${baseUrl}${iconValue}`;
             return (
                 <img
-                    src={fullUrl}
+                    src={resolveAssetUrl(iconValue)}
                     alt="icon"
                     className={className}
                     style={{
@@ -178,7 +177,7 @@ const DishManagement = () => {
         );
     };
 
-    const isPhotoIcon = icon.startsWith('http') || icon.startsWith('/uploads');
+    const isPhotoIcon = isAssetUrl(icon);
 
     return (
         <div className="dish-management-container">

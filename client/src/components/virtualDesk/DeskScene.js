@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import API_URL from '../../api';
+import { isAssetUrl, resolveAssetUrl } from '../../utils/assetUrl';
 
 export const DESK_SIZE = 500;
 
@@ -273,7 +273,7 @@ const DeskScene = ({
           >
             <div className="desk-underlay-content">
               <img
-                src={underlay.image.startsWith('http') ? underlay.image : `${API_URL.replace('/api', '')}${underlay.image}`}
+                src={resolveAssetUrl(underlay.image)}
                 alt={underlay.name || 'underlay'}
                 className="desk-underlay-image"
               />
@@ -307,7 +307,7 @@ const DeskScene = ({
 
         {ghostItems.map((item, index) => {
           const itemIcon = resolveIcon(item, dishes);
-          const isImage = itemIcon.startsWith('http') || itemIcon.startsWith('/uploads');
+          const isImage = isAssetUrl(itemIcon);
 
           return (
             <div
@@ -319,7 +319,7 @@ const DeskScene = ({
                 <span className={`item-icon ${isImage ? 'item-icon-photo' : ''}`}>
                   {isImage ? (
                     <TrimmedPhotoImage
-                      src={itemIcon.startsWith('http') ? itemIcon : `${API_URL.replace('/api', '')}${itemIcon}`}
+                      src={resolveAssetUrl(itemIcon)}
                       alt={item.name || 'ghost-item'}
                       boxWidth={item.width ?? 40}
                       boxHeight={item.height ?? 40}
@@ -336,7 +336,7 @@ const DeskScene = ({
 
         {sortedItems.map((item) => {
           const itemIcon = resolveIcon(item, dishes);
-          const isImage = itemIcon.startsWith('http') || itemIcon.startsWith('/uploads');
+          const isImage = isAssetUrl(itemIcon);
           const showControls = showTransformControls || showDeleteControl;
 
           return (
@@ -367,7 +367,7 @@ const DeskScene = ({
                 <span className={`item-icon ${isImage ? 'item-icon-photo' : ''}`}>
                   {isImage ? (
                     <TrimmedPhotoImage
-                      src={itemIcon.startsWith('http') ? itemIcon : `${API_URL.replace('/api', '')}${itemIcon}`}
+                      src={resolveAssetUrl(itemIcon)}
                       alt={item.name}
                       boxWidth={item.width ?? 40}
                       boxHeight={item.height ?? 40}

@@ -44,7 +44,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     }
 
     const filePath = req.file.path;
-    const fileUrl = `/uploads/${req.file.filename}`;
+    const fileUrl = `/api/uploads/${req.file.filename}`;
 
     try {
         // If it's an image, optimize it

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import VideoPlayer from './VideoPlayer';
-import API_URL from '../api';
 import './QuizEngine.css';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 /**
  * Shared quiz engine — one question at a time, server-side answer checking.
@@ -144,7 +144,7 @@ const QuizEngine = ({ questions, checkAnswer, onComplete, passingScore = 80, tim
 
                 {q.image && (
                     <div className="qe-media">
-                        <img src={q.image.startsWith('http') ? q.image : `${API_URL.replace('/api', '')}${q.image}`}
+                        <img src={resolveAssetUrl(q.image)}
                             alt="" className="qe-q-image" />
                     </div>
                 )}

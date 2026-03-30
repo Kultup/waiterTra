@@ -76,6 +76,7 @@ if (!fs.existsSync(uploadsDir)) {
     logger.info('Created uploads directory');
 }
 app.use('/uploads', express.static(uploadsDir));
+app.use('/api/uploads', express.static(uploadsDir));
 
 // Request logging middleware
 app.use((req, res, next) => {

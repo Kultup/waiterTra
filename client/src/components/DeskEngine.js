@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './VirtualDesk.css';
-import API_URL from '../api';
 import DeskScene, { DESK_SIZE } from './virtualDesk/DeskScene';
+import { isAssetUrl, resolveAssetUrl } from '../utils/assetUrl';
 
 const normalizeInventoryDish = (dish, index) => {
   const sourceId = String(dish._id || dish.type || dish.id || dish.name || `dish-${index}`);
@@ -252,9 +252,9 @@ const DeskEngine = ({
                 onClick={() => !result && setSelectedDish(dish)}
               >
                 <span className="inv-icon">
-                  {dish.icon && (dish.icon.startsWith('http') || dish.icon.startsWith('/uploads')) ? (
+                  {dish.icon && isAssetUrl(dish.icon) ? (
                     <img
-                      src={dish.icon.startsWith('http') ? dish.icon : `${API_URL.replace('/api', '')}${dish.icon}`}
+                      src={resolveAssetUrl(dish.icon)}
                       alt={dish.name}
                       style={{
                         width: '100%',

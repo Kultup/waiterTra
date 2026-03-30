@@ -1,12 +1,12 @@
 import React from 'react';
-import API_URL from '../../api';
+import { isAssetUrl, resolveAssetUrl } from '../../utils/assetUrl';
 
 const normalizeRotation = (value) => ((value % 360) + 360) % 360;
 
 const renderDishIcon = (dish) => {
   if (!dish?.icon) return '🍽️';
 
-  const isImage = dish.icon.startsWith('http') || dish.icon.startsWith('/uploads');
+  const isImage = isAssetUrl(dish.icon);
   if (!isImage) {
     return (
       <span style={{ display: 'inline-flex', transform: `rotate(${normalizeRotation(dish.rotation || 0)}deg)` }}>
@@ -15,7 +15,7 @@ const renderDishIcon = (dish) => {
     );
   }
 
-  const src = dish.icon.startsWith('http') ? dish.icon : `${API_URL.replace('/api', '')}${dish.icon}`;
+  const src = resolveAssetUrl(dish.icon);
   return (
     <img
       src={src}

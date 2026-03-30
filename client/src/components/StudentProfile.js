@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import API_URL from '../api';
 import './StudentProfile.css';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 const TYPE_LABELS = {
     desk: 'Стіл',
@@ -57,7 +58,7 @@ const VideoPlayerMini = ({ url }) => {
     const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
     if (vimeoMatch) return <iframe title="vimeo"
         src={`https://player.vimeo.com/video/${vimeoMatch[1]}`} width="100%" height="300px" frameBorder="0" allowFullScreen />;
-    const src = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}${url}`;
+    const src = resolveAssetUrl(url);
     return <video controls style={{ width: '100%', maxHeight: '300px' }}><source src={src} /></video>;
 };
 
@@ -66,7 +67,7 @@ const QuizAnswersList = ({ answers }) => (
         {answers.map((a, i) => (
             <div key={i} className={`sp-answer ${a.isCorrect ? 'correct' : 'wrong'}`}>
                 <div className="sp-answer-q">Питання {i + 1}: {a.questionText}</div>
-                {a.image && <img src={a.image.startsWith('http') ? a.image : `${API_URL.replace('/api', '')}${a.image}`} alt="" className="sp-answer-img" />}
+                {a.image && <img src={resolveAssetUrl(a.image)} alt="" className="sp-answer-img" />}
                 {a.video && <div className="sp-answer-video"><VideoPlayerMini url={a.video} /></div>}
                 <div className="sp-answer-row">
                     <span className={`sp-answer-badge ${a.isCorrect ? 'correct' : 'wrong'}`}>

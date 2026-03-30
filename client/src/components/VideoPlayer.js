@@ -1,5 +1,5 @@
 import React from 'react';
-import API_URL from '../api';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 const VideoPlayer = ({ url }) => {
     if (!url) return null;
@@ -25,7 +25,7 @@ const VideoPlayer = ({ url }) => {
         );
     }
 
-    const videoSrc = url.startsWith('http') ? url : `${API_URL.replace('/api', '')}${url}`;
+    const videoSrc = resolveAssetUrl(url);
     return (
         <video controls style={{ width: '100%', height: '100%' }}>
             <source src={videoSrc} />
