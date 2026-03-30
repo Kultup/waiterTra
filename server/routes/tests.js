@@ -57,11 +57,55 @@ router.get('/multi/:hash', async (req, res) => {
     const response = test.toObject();
     response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
 
-    // Strip template items (correct positions) — scoring is server-side
+    // Strip scoring coordinates from the public payload, but keep an exact inventory snapshot.
     if (response.templateIds) {
-      response.templateIds = response.templateIds.map(t => {
-        const { items, ...rest } = t;
-        return rest;
+      response.templateIds = response.templateIds.map((template) => {
+        const templateObject = typeof template.toObject === 'function' ? template.toObject() : template;
+
+        if (!templateObject.items) {
+          return templateObject;
+        }
+
+        return {
+          ...templateObject,
+          underlays: templateObject.underlays || [],
+          allowedItems: templateObject.items.map((item, index) => ({
+            id: item.id || `${item.type}-${index}`,
+            type: item.type,
+            name: item.name,
+            icon: item.icon,
+            width: item.width,
+            height: item.height,
+            rotation: item.rotation || 0,
+            zIndex: item.zIndex || 0,
+          })),
+          templateSnapshot: {
+            deskSurfacePreset: templateObject.deskSurfacePreset || 'walnut',
+            deskSurfaceColor: templateObject.deskSurfaceColor || '#ffffff',
+            underlays: (templateObject.underlays || []).map((underlay) => ({
+              id: underlay.id,
+              name: underlay.name,
+              image: underlay.image,
+              x: underlay.x,
+              y: underlay.y,
+              width: underlay.width,
+              height: underlay.height,
+              rotation: underlay.rotation || 0,
+              zIndex: underlay.zIndex ?? -10,
+            })),
+            items: templateObject.items.map((item) => ({
+              id: item.id,
+              type: item.type,
+              name: item.name,
+              icon: item.icon,
+              width: item.width,
+              height: item.height,
+              rotation: item.rotation || 0,
+              zIndex: item.zIndex || 0,
+            })),
+          },
+          items: undefined,
+        };
       });
     }
 
@@ -93,34 +137,8 @@ router.post('/multi/:hash/check-step', async (req, res) => {
     const template = test.templateIds[stepIndex];
     if (!template) return res.status(400).json({ error: 'Invalid stepIndex' });
 
-    const targetItems = template.items;
-    const tolerance = 50;
-    let score = 0;
-
-    const validatedItems = items.map(userItem => {
-      const match = targetItems.find(t =>
-        userItem.type === t.type &&
-        Math.abs(userItem.x - t.x) < tolerance &&
-        Math.abs(userItem.y - t.y) < tolerance
-      );
-      return { ...userItem, isCorrect: !!match };
-    });
-
-    targetItems.forEach(target => {
-      const found = items.some(ui =>
-        ui.type === target.type &&
-        Math.abs(ui.x - target.x) < tolerance &&
-        Math.abs(ui.y - target.y) < tolerance
-      );
-      if (found) score++;
-    });
-
-    const total = targetItems.length;
-    const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-    const passed = percentage >= 80;
-    const ghostItems = targetItems.map(i => ({ type: i.type, name: i.name, icon: i.icon, x: i.x, y: i.y }));
-
-    res.json({ score, total, percentage, passed, validatedItems, ghostItems });
+    const result = validateDeskPlacement(items, template.items);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -195,6 +213,41 @@ router.get('/:hash', async (req, res) => {
 
     // Strip template items (correct positions) — scoring is server-side
     if (response.templateId && response.templateId.items) {
+      response.templateId.allowedItems = response.templateId.items.map((item, index) => ({
+        id: item.id || `${item.type}-${index}`,
+        type: item.type,
+        name: item.name,
+        icon: item.icon,
+        width: item.width,
+        height: item.height,
+        rotation: item.rotation || 0,
+        zIndex: item.zIndex || 0,
+      }));
+      response.templateId.templateSnapshot = {
+        deskSurfacePreset: response.templateId.deskSurfacePreset || 'walnut',
+        deskSurfaceColor: response.templateId.deskSurfaceColor || '#ffffff',
+        underlays: (response.templateId.underlays || []).map((underlay) => ({
+          id: underlay.id,
+          name: underlay.name,
+          image: underlay.image,
+          x: underlay.x,
+          y: underlay.y,
+          width: underlay.width,
+          height: underlay.height,
+          rotation: underlay.rotation || 0,
+          zIndex: underlay.zIndex ?? -10,
+        })),
+        items: response.templateId.items.map((item) => ({
+          id: item.id,
+          type: item.type,
+          name: item.name,
+          icon: item.icon,
+          width: item.width,
+          height: item.height,
+          rotation: item.rotation || 0,
+          zIndex: item.zIndex || 0,
+        })),
+      };
       delete response.templateId.items;
     }
 
@@ -241,30 +294,15 @@ router.post('/:hash/submit', async (req, res) => {
     await test.save();
 
     const targetItems = test.templateId.items;
-    const tolerance = 50;
-    let score = 0;
-
-    const validatedItems = items.map(userItem => {
-      const correctMatch = targetItems.find(target =>
-        userItem.type === target.type &&
-        Math.abs(userItem.x - target.x) < tolerance &&
-        Math.abs(userItem.y - target.y) < tolerance
-      );
-      return { ...userItem, isCorrect: !!correctMatch };
-    });
-
-    targetItems.forEach(target => {
-      const found = items.some(userItem =>
-        userItem.type === target.type &&
-        Math.abs(userItem.x - target.x) < tolerance &&
-        Math.abs(userItem.y - target.y) < tolerance
-      );
-      if (found) score++;
-    });
-
-    const total = targetItems.length;
-    const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-    const passed = percentage >= 80;
+    const {
+      score,
+      total,
+      percentage,
+      passed,
+      validatedItems,
+      ghostItems,
+      semanticFeedback
+    } = validateDeskPlacement(items, targetItems);
 
     const result = new TestResult({
       testId: test._id,
@@ -286,10 +324,7 @@ router.post('/:hash/submit', async (req, res) => {
     // Sync student stats and emit real-time event
     await syncStudent(studentName, studentLastName, studentCity, req.app.get('io'), result);
 
-    // Return ghost items (correct positions) for overlay
-    const ghostItems = targetItems.map(i => ({ type: i.type, name: i.name, icon: i.icon, x: i.x, y: i.y }));
-
-    res.status(201).json({ score, total, percentage, passed, validatedItems, ghostItems });
+    res.status(201).json({ score, total, percentage, passed, validatedItems, ghostItems, semanticFeedback });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

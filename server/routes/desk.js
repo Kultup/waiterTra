@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.get('/', auth, async (req, res) => {
   try {
-    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
+    const query = { ownerId: req.user._id };
     const items = await DeskItem.find(query);
     
     // Server-side filtering: only return items whose 'type' exists in the Dish collection
@@ -38,7 +38,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 router.patch('/:id', auth, async (req, res) => {
-  const allowedFields = ['x', 'y', 'width', 'height', 'rotation'];
+  const allowedFields = ['x', 'y', 'width', 'height', 'rotation', 'zIndex'];
   const updates = {};
 
   for (const field of allowedFields) {
@@ -85,8 +85,7 @@ router.delete('/:id', auth, async (req, res) => {
 // Bulk DELETE all items for the current user
 router.delete('/', auth, async (req, res) => {
   try {
-    const query = req.user.role === 'superadmin' ? {} : { ownerId: req.user._id };
-    await DeskItem.deleteMany(query);
+    await DeskItem.deleteMany({ ownerId: req.user._id });
     res.json({ message: 'All items deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });

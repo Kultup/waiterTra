@@ -18,8 +18,8 @@ const MultiDeskTest = () => {
     const [currentStep, setCurrentStep] = useState(0);
     const [dishes, setDishes] = useState([]);
     const [stepResults, setStepResults] = useState([]);
-    const [stepDone, setStepDone] = useState(false);
     const [currentStepResult, setCurrentStepResult] = useState(null);
+    const [catalogDishes, setCatalogDishes] = useState([]);
 
     const [showSummary, setShowSummary] = useState(false);
     const [serverResults, setServerResults] = useState(null);
@@ -35,7 +35,7 @@ const MultiDeskTest = () => {
                 if (testRes.data.city) {
                     setStudentInfo(prev => ({ ...prev, city: testRes.data.city }));
                 }
-                setDishes(dishesRes.data.map(d => ({ ...d, id: d._id })));
+                setCatalogDishes(dishesRes.data.map(d => ({ ...d, id: d._id })));
             } catch (err) {
                 console.error('Error fetching multi-test data:', err);
                 if (err.response?.status === 410) navigate('/inactive');
@@ -44,13 +44,28 @@ const MultiDeskTest = () => {
             }
         };
         fetchData();
-    }, [hash]);
+    }, [hash, navigate]);
 
     const templates = testData?.templateIds || [];
     const currentTemplate = templates[currentStep];
 
     useEffect(() => {
-        setStepDone(false);
+        if (!currentTemplate) return;
+
+        const allowedItems = currentTemplate.allowedItems || [];
+        if (allowedItems.length > 0) {
+            setDishes(allowedItems.map((item) => ({
+                ...item,
+                _id: item.id || item.type,
+                id: item.id || item.type,
+            })));
+            return;
+        }
+
+        setDishes(catalogDishes);
+    }, [currentTemplate, catalogDishes]);
+
+    useEffect(() => {
         setCurrentStepResult(null);
     }, [currentStep]);
 
@@ -73,7 +88,6 @@ const MultiDeskTest = () => {
 
     const handleDeskResult = (result) => {
         setCurrentStepResult(result);
-        setStepDone(true);
     };
 
     const handleNext = async () => {
@@ -90,7 +104,7 @@ const MultiDeskTest = () => {
                     studentLastName: studentInfo.lastName,
                     studentCity: studentInfo.city,
                     studentPosition: studentInfo.position,
-                    results: newResults.map(r => ({ items: [] }))
+                    results: newResults.map((result) => ({ items: result?.submittedItems || [] }))
                 });
                 setServerResults(res.data.stepResults);
             } catch (e) {
@@ -209,8 +223,11 @@ const MultiDeskTest = () => {
             <DeskEngine
                 key={`desk-${currentStep}`}
                 dishes={dishes}
+                underlays={currentTemplate?.underlays || currentTemplate?.templateSnapshot?.underlays || []}
                 description={currentTemplate?.description}
                 timeLimit={currentTemplate?.timeLimit || 0}
+                deskSurfacePreset={currentTemplate?.deskSurfacePreset || currentTemplate?.templateSnapshot?.deskSurfacePreset || 'walnut'}
+                deskSurfaceColor={currentTemplate?.deskSurfaceColor || currentTemplate?.templateSnapshot?.deskSurfaceColor || '#ffffff'}
                 onSubmit={handleDeskSubmit}
                 onResult={handleDeskResult}
                 embedded

@@ -1,18 +1,85 @@
-/**
- * Validates student's desk item placements against a target template.
- *
- * @param {Array} userItems - Items placed by the student [{ type, x, y, ... }]
- * @param {Array} targetItems - Correct items from the template [{ type, x, y, ... }]
- * @param {number} tolerance - Pixel range for a match (default 50)
- * @returns {Object} { score, total, percentage, passed, validatedItems, ghostItems }
- */
+function findAnchor(items) {
+  return (
+    items.find((item) => /plate|таріл|plate/i.test(String(item.type || '') + ' ' + String(item.name || ''))) ||
+    items[0] ||
+    null
+  );
+}
+
+function relativeSide(item, anchor, axis) {
+  if (!item || !anchor) return null;
+  const delta = axis === 'x' ? item.x - anchor.x : item.y - anchor.y;
+  if (Math.abs(delta) < 15) return 'center';
+  return delta > 0 ? (axis === 'x' ? 'right' : 'bottom') : (axis === 'x' ? 'left' : 'top');
+}
+
+function buildSemanticFeedback(userItems, targetItems) {
+  const targetAnchor = findAnchor(targetItems);
+  const userAnchor = findAnchor(userItems);
+  const issues = [];
+
+  if (!targetAnchor || !userAnchor) {
+    return { summary: null, issues };
+  }
+
+  const matchedPairs = [];
+  const usedUserIndexes = new Set();
+
+  targetItems.forEach((targetItem) => {
+    const userIndex = userItems.findIndex((userItem, index) => (
+      !usedUserIndexes.has(index) && String(userItem.type) === String(targetItem.type)
+    ));
+
+    if (userIndex >= 0) {
+      usedUserIndexes.add(userIndex);
+      matchedPairs.push({ targetItem, userItem: userItems[userIndex] });
+    }
+  });
+
+  matchedPairs.forEach(({ targetItem, userItem }) => {
+    if (String(targetItem.type) === String(targetAnchor.type) && String(targetItem.name) === String(targetAnchor.name)) {
+      return;
+    }
+
+    const expectedX = relativeSide(targetItem, targetAnchor, 'x');
+    const actualX = relativeSide(userItem, userAnchor, 'x');
+    const expectedY = relativeSide(targetItem, targetAnchor, 'y');
+    const actualY = relativeSide(userItem, userAnchor, 'y');
+
+    if (expectedX && actualX && expectedX !== 'center' && actualX !== expectedX) {
+      issues.push({
+        type: String(targetItem.type),
+        itemName: targetItem.name || targetItem.type,
+        message: `${targetItem.name || targetItem.type} має бути ${expectedX === 'left' ? 'ліворуч' : 'праворуч'} від центрального предмета.`,
+      });
+      return;
+    }
+
+    if (expectedY && actualY && expectedY !== 'center' && actualY !== expectedY) {
+      issues.push({
+        type: String(targetItem.type),
+        itemName: targetItem.name || targetItem.type,
+        message: `${targetItem.name || targetItem.type} має бути ${expectedY === 'top' ? 'вище' : 'нижче'} від центрального предмета.`,
+      });
+    }
+  });
+
+  const dedupedIssues = issues.filter((issue, index, array) => (
+    array.findIndex((entry) => entry.message === issue.message) === index
+  ));
+
+  return {
+    summary: dedupedIssues.length > 0 ? `Є ${dedupedIssues.length} позиційних підказок щодо розміщення приборів.` : null,
+    issues: dedupedIssues.slice(0, 3),
+  };
+}
+
 function validateDeskPlacement(userItems, targetItems, tolerance = 50) {
   let score = 0;
   const total = targetItems.length;
 
-  // 1. Validate each user item (mark as correct/incorrect)
-  const validatedItems = userItems.map(userItem => {
-    const correctMatch = targetItems.find(target =>
+  const validatedItems = userItems.map((userItem) => {
+    const correctMatch = targetItems.find((target) =>
       String(userItem.type) === String(target.type) &&
       Math.abs(userItem.x - target.x) < tolerance &&
       Math.abs(userItem.y - target.y) < tolerance
@@ -20,9 +87,8 @@ function validateDeskPlacement(userItems, targetItems, tolerance = 50) {
     return { ...userItem, isCorrect: !!correctMatch };
   });
 
-  // 2. Calculate score (how many target items were correctly covered)
-  targetItems.forEach(target => {
-    const found = userItems.some(userItem =>
+  targetItems.forEach((target) => {
+    const found = userItems.some((userItem) =>
       String(userItem.type) === String(target.type) &&
       Math.abs(userItem.x - target.x) < tolerance &&
       Math.abs(userItem.y - target.y) < tolerance
@@ -33,13 +99,12 @@ function validateDeskPlacement(userItems, targetItems, tolerance = 50) {
   const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
   const passed = percentage >= 80;
 
-  // 3. Prepare ghost items (correct positions for frontend overlay)
-  const ghostItems = targetItems.map(i => ({
-    type: i.type,
-    name: i.name,
-    icon: i.icon,
-    x: i.x,
-    y: i.y
+  const ghostItems = targetItems.map((item) => ({
+    type: item.type,
+    name: item.name,
+    icon: item.icon,
+    x: item.x,
+    y: item.y,
   }));
 
   return {
@@ -48,10 +113,11 @@ function validateDeskPlacement(userItems, targetItems, tolerance = 50) {
     percentage,
     passed,
     validatedItems,
-    ghostItems
+    ghostItems,
+    semanticFeedback: buildSemanticFeedback(userItems, targetItems),
   };
 }
 
 module.exports = {
-  validateDeskPlacement
+  validateDeskPlacement,
 };

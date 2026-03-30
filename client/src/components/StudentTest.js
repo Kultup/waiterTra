@@ -9,6 +9,7 @@ const StudentTest = () => {
     const { hash } = useParams();
     const navigate = useNavigate();
     const [testData, setTestData] = useState(null);
+    const [catalogDishes, setCatalogDishes] = useState([]);
     const [dishes, setDishes] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -30,13 +31,29 @@ const StudentTest = () => {
                 ]);
                 setAvailableCities(citiesRes.data);
                 const mappedDishes = dishesRes.data.map(d => ({ ...d, id: d._id }));
-                setDishes(mappedDishes);
+                setCatalogDishes(mappedDishes);
             } catch (error) {
                 console.error('Error fetching initial data:', error);
             }
         };
         fetchInitialData();
     }, []);
+
+    useEffect(() => {
+        if (!testData) return;
+
+        const allowedItems = testData.templateId?.allowedItems || [];
+        if (allowedItems.length > 0) {
+            setDishes(allowedItems.map((item) => ({
+                ...item,
+                _id: item.id || item.type,
+                id: item.id || item.type,
+            })));
+            return;
+        }
+
+        setDishes(catalogDishes);
+    }, [testData, catalogDishes]);
 
     useEffect(() => {
         const fetchTest = async () => {
@@ -147,8 +164,11 @@ const StudentTest = () => {
             </div>
             <DeskEngine
                 dishes={dishes}
+                underlays={testData.templateId?.underlays || testData.templateId?.templateSnapshot?.underlays || []}
                 description={testData.description || testData.templateId?.description}
                 timeLimit={testData.templateId?.timeLimit || 0}
+                deskSurfacePreset={testData.templateId?.deskSurfacePreset || 'walnut'}
+                deskSurfaceColor={testData.templateId?.deskSurfaceColor || '#ffffff'}
                 onSubmit={handleDeskSubmit}
                 onResult={handleDeskResult}
             />

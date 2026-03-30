@@ -4,7 +4,7 @@
 
 .multi-desk-container {
     min-height: 100vh;
-    padding: 1.5rem;
+    padding: 0.75rem 1rem;
     display: flex;
     flex-direction: column;
 }
@@ -16,7 +16,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.65rem;
     flex-wrap: wrap;
 }
 
@@ -74,7 +74,7 @@
 
 .step-header {
     text-align: center;
-    margin-bottom: 1rem;
+    margin-bottom: 0.45rem;
 }
 
 .step-header h2 {

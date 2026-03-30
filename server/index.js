@@ -109,6 +109,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/serviq')
 
 const authRouter = require('./routes/auth');
 const deskRouter = require('./routes/desk');
+const deskStateRouter = require('./routes/deskState');
 const templatesRouter = require('./routes/templates');
 const testsRouter = require('./routes/tests');
 const testResultsRouter = require('./routes/testResults');
@@ -126,6 +127,7 @@ const studentRouter = require('./routes/student');
 
 app.use('/api/auth', authRouter);
 app.use('/api/desk-items', deskRouter);
+app.use('/api/desk-state', deskStateRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/tests', testsRouter);
 app.use('/api/test-results', testResultsRouter);

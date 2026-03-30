@@ -1,200 +1,324 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './VirtualDesk.css';
 import API_URL from '../api';
+import DeskScene, { DESK_SIZE } from './virtualDesk/DeskScene';
 
-/**
- * Shared desk placement engine — used by StudentTest and ComplexTestPlay.
- *
- * Props:
- *   dishes         — array of dish objects { id, name, icon, ... }
- *   description    — optional string (task instructions)
- *   timeLimit      — minutes (0 = no limit)
- *   onSubmit       — async (items) => { score, total, percentage, passed, validatedItems, ghostItems? }
- *   onResult       — (result) => void  — called when result is ready
- *   embedded       — boolean (true in ComplexTestPlay)
- *   nextButton     — ReactNode (custom button shown after result, e.g. "Далі →")
- */
-const DeskEngine = ({ dishes, description, timeLimit = 0, onSubmit, onResult, embedded = false, nextButton }) => {
-    const [items, setItems] = useState([]);
-    const [selectedDish, setSelectedDish] = useState(null);
-    const [result, setResult] = useState(null);
-    const [ghostItems, setGhostItems] = useState([]);
-    const [timeLeft, setTimeLeft] = useState(null);
-    const handleCheckRef = useRef(null);
+const normalizeInventoryDish = (dish, index) => {
+  const sourceId = String(dish._id || dish.type || dish.id || dish.name || `dish-${index}`);
+  const inventoryId = String(dish.inventoryId || `${sourceId}-${index}`);
 
-    useEffect(() => {
-        if (dishes.length > 0 && !selectedDish) setSelectedDish(dishes[0]);
-    }, [dishes]);
+  return {
+    ...dish,
+    inventoryId,
+    id: inventoryId,
+    _id: sourceId,
+  };
+};
 
-    // Timer
-    useEffect(() => {
-        if (timeLimit > 0 && !result) {
-            setTimeLeft(timeLimit * 60);
-        }
-    }, [timeLimit, result]);
+const DeskEngine = ({
+  dishes,
+  description,
+  timeLimit = 0,
+  deskSurfacePreset = 'walnut',
+  deskSurfaceColor = '#ffffff',
+  underlays = [],
+  onSubmit,
+  onResult,
+  embedded = false,
+  nextButton,
+}) => {
+  const [items, setItems] = useState([]);
+  const [availableDishes, setAvailableDishes] = useState([]);
+  const [selectedDish, setSelectedDish] = useState(null);
+  const [result, setResult] = useState(null);
+  const [ghostItems, setGhostItems] = useState([]);
+  const [semanticFeedback, setSemanticFeedback] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(null);
+  const handleCheckRef = useRef(null);
+  const inventoryRegistryRef = useRef(new Map());
+  const inventoryOrderRef = useRef(new Map());
+  const placementGuardRef = useRef({
+    time: 0,
+    x: null,
+    y: null,
+    dishKey: null,
+  });
 
-    useEffect(() => {
-        if (timeLeft === null || result) return;
-        if (timeLeft === 0) {
-            handleCheckRef.current?.();
-            return;
-        }
-        const timer = setInterval(() => setTimeLeft(p => p - 1), 1000);
-        return () => clearInterval(timer);
-    }, [timeLeft, result]);
+  useEffect(() => {
+    const registry = new Map();
+    const order = new Map();
+    const normalizedDishes = dishes.map(normalizeInventoryDish);
 
-    const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+    normalizedDishes.forEach((dish, index) => {
+      registry.set(dish.inventoryId, dish);
+      order.set(dish.inventoryId, index);
+    });
 
-    const handleDeskClick = (e) => {
-        if (result || !selectedDish) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 500;
-        const y = ((e.clientY - rect.top) / rect.height) * 500;
-        setItems(prev => [...prev, {
-            _id: Date.now().toString(),
-            name: selectedDish.name,
-            icon: selectedDish.icon,
-            x, y,
-            type: selectedDish.id
-        }]);
+    inventoryRegistryRef.current = registry;
+    inventoryOrderRef.current = order;
+    setAvailableDishes(normalizedDishes);
+  }, [dishes]);
+
+  useEffect(() => {
+    if (availableDishes.length === 0) {
+      setSelectedDish(null);
+      return;
+    }
+
+    if (!selectedDish) {
+      setSelectedDish(availableDishes[0]);
+      return;
+    }
+
+    const selectedDishId = String(selectedDish.inventoryId || selectedDish.id || selectedDish._id);
+    const stillAvailable = availableDishes.find((dish) => String(dish.inventoryId || dish.id || dish._id) === selectedDishId);
+    if (!stillAvailable) {
+      setSelectedDish(availableDishes[0]);
+    }
+  }, [availableDishes, selectedDish]);
+
+  useEffect(() => {
+    if (timeLimit > 0 && !result) {
+      setTimeLeft(timeLimit * 60);
+    }
+  }, [timeLimit, result]);
+
+  useEffect(() => {
+    if (timeLeft === null || result) return undefined;
+    if (timeLeft === 0) {
+      handleCheckRef.current?.();
+      return undefined;
+    }
+
+    const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft, result]);
+
+  const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
+
+  const handleDeskClick = (event) => {
+    if (result || !selectedDish) return;
+    if (event.target instanceof Element && event.target.closest('.desk-item')) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * DESK_SIZE;
+    const y = ((event.clientY - rect.top) / rect.height) * DESK_SIZE;
+    const nextDishKey = selectedDish.id || selectedDish._id || selectedDish.type || selectedDish.name;
+    const now = Date.now();
+    const previousPlacement = placementGuardRef.current;
+    const isDuplicatePlacement =
+      previousPlacement.dishKey === nextDishKey
+      && previousPlacement.x !== null
+      && previousPlacement.y !== null
+      && now - previousPlacement.time < 300
+      && Math.abs(previousPlacement.x - x) < 6
+      && Math.abs(previousPlacement.y - y) < 6;
+
+    if (isDuplicatePlacement) return;
+
+    placementGuardRef.current = {
+      time: now,
+      x,
+      y,
+      dishKey: nextDishKey,
     };
 
-    const handleDelete = (id) => {
-        if (result) return;
-        setItems(prev => prev.filter(i => i._id !== id));
-    };
+    const selectedDishId = String(selectedDish.inventoryId || selectedDish.id || selectedDish._id || selectedDish.type || selectedDish.name);
+    const nextAvailableDishes = availableDishes.filter((dish) => (
+      String(dish.inventoryId || dish.id || dish._id || dish.type || dish.name) !== selectedDishId
+    ));
 
-    const handleCheck = async () => {
-        if (result || items.length === 0) return;
-        try {
-            const payload = items.map(({ type, name, icon, x, y }) => ({ type, name, icon, x, y }));
-            const res = await onSubmit(payload);
-            // Merge validation into items
-            const merged = items.map((item, idx) => ({
-                ...item,
-                isCorrect: res.validatedItems?.[idx]?.isCorrect ?? false,
-            }));
-            setItems(merged);
-            if (res.ghostItems) setGhostItems(res.ghostItems);
-            const r = { score: res.score, total: res.total, percentage: res.percentage, passed: res.passed };
-            setResult(r);
-            onResult?.(r);
-        } catch (err) {
-            console.error('Desk check error:', err);
-            alert('Помилка при перевірці');
-        }
-    };
+    setAvailableDishes(nextAvailableDishes);
+    setSelectedDish(nextAvailableDishes[0] || null);
 
-    handleCheckRef.current = handleCheck;
+    setItems((prev) => [
+      ...prev,
+      {
+        _id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        inventoryId: selectedDishId,
+        name: selectedDish.name,
+        icon: selectedDish.icon,
+        x,
+        y,
+        type: selectedDish.type || selectedDish.id || selectedDish._id,
+        width: selectedDish.width ?? 40,
+        height: selectedDish.height ?? 40,
+        rotation: selectedDish.rotation ?? 0,
+        zIndex: selectedDish.zIndex ?? prev.length,
+      },
+    ]);
+  };
 
-    return (
-        <div className={`virtual-desk-container student-test ${result ? 'has-result' : ''}`} style={embedded ? { flex: 1 } : {}}>
-            <header className="desk-header">
-                <div className="header-info">
-                    {description && (
-                        <div style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '10px', padding: '0.6rem 1rem', marginBottom: '0.4rem', fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.4 }}>
-                            📋 {description}
-                        </div>
-                    )}
-                    <p>На столі: {items.length} предметів</p>
-                </div>
-                <div className="header-actions">
-                    {timeLeft !== null && !result && (
-                        <span className={`test-timer ${timeLeft < 60 ? 'timer-warning' : ''}`}
-                            style={{ fontSize: '1.4rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                            ⏱ {formatTime(timeLeft)}
-                        </span>
-                    )}
-                    {!result && (
-                        <button className="btn-add" onClick={handleCheck} disabled={items.length === 0}>
-                            Перевірити результат
-                        </button>
-                    )}
-                    {result && nextButton}
-                </div>
-            </header>
+  const handleDelete = (itemId) => {
+    if (result) return;
 
-            <div className="desk-body">
-                <aside className="desk-panel inventory-panel">
-                    <div className="panel-label">Посуд</div>
-                    <div className="inventory-grid">
-                        {dishes.map(dish => (
-                            <div key={dish.id}
-                                className={`inv-item ${selectedDish?.id === dish.id ? 'active' : ''}`}
-                                onClick={() => !result && setSelectedDish(dish)}>
-                                <span className="inv-icon">
-                                    {(dish.icon && (dish.icon.startsWith('http') || dish.icon.startsWith('/uploads'))) ? (
-                                        <img src={dish.icon.startsWith('http') ? dish.icon : `${API_URL.replace('/api', '')}${dish.icon}`} alt={dish.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    ) : (
-                                        dish.icon || '🍽️'
-                                    )}
-                                </span>
-                                <span className="inv-name">{dish.name}</span>
-                            </div>
-                        ))}
-                        {dishes.length === 0 && <div className="sidebar-empty">Немає посуду</div>}
-                    </div>
-                </aside>
+    const removedItem = items.find((item) => item._id === itemId);
+    if (!removedItem) return;
 
-                <div className="desk-workspace">
-                    <div className="square-desk" onClick={handleDeskClick}>
-                        {/* Ghost items (correct positions) — shown after check */}
-                        {result && ghostItems.map((target, idx) => (
-                            <div key={`ghost-${idx}`} className="desk-item ghost-item"
-                                style={{ left: `${(target.x / 500) * 100}%`, top: `${(target.y / 500) * 100}%` }}>
-                                <span className="item-icon">
-                                    {(target.icon && (target.icon.startsWith('http') || target.icon.startsWith('/uploads'))) ? (
-                                        <img src={target.icon.startsWith('http') ? target.icon : `${API_URL.replace('/api', '')}${target.icon}`} alt="target" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    ) : (
-                                        target.icon
-                                    )}
-                                </span>
-                            </div>
-                        ))}
-                        {items.map(item => (
-                            <div key={item._id}
-                                className={`desk-item ${result ? (item.isCorrect ? 'correct' : 'incorrect') : ''}`}
-                                style={{ left: `${(item.x / 500) * 100}%`, top: `${(item.y / 500) * 100}%` }}
-                                onClick={e => e.stopPropagation()}>
-                                <span className="item-icon">
-                                    {(item.icon && (item.icon.startsWith('http') || item.icon.startsWith('/uploads'))) ? (
-                                        <img src={item.icon.startsWith('http') ? item.icon : `${API_URL.replace('/api', '')}${item.icon}`} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    ) : (
-                                        item.icon
-                                    )}
-                                </span>
-                                <span className="item-text">{item.name}</span>
-                                {!result && (
-                                    <button className="item-delete" onClick={() => handleDelete(item._id)}>×</button>
-                                )}
-                            </div>
-                        ))}
-                        {items.length === 0 && !result && (
-                            <div className="desk-placeholder">
-                                <span className="desk-icon">📋</span>
-                                <span className="desk-label">Розпочніть сервірування</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
+    setItems((prev) => prev.filter((item) => item._id !== itemId));
 
-                {result && (
-                    <aside className="desk-panel results-panel">
-                        <div className="panel-label">Результат</div>
-                        <div className="result-card">
-                            <div className="result-score" style={{ color: result.passed ? '#4ade80' : '#f87171' }}>
-                                {result.percentage}%
-                            </div>
-                            <p>Правильно: {result.score} з {result.total}</p>
-                            <p className="result-status">
-                                {result.passed ? '✅ Пройдено!' : '❌ Не пройдено'}
-                            </p>
-                        </div>
-                    </aside>
-                )}
+    const restoredDish = inventoryRegistryRef.current.get(String(removedItem.inventoryId));
+    if (!restoredDish) return;
+
+    setAvailableDishes((prev) => (
+      [...prev, restoredDish].sort((left, right) => (
+        (inventoryOrderRef.current.get(String(left.inventoryId || left.id || left._id)) ?? 0) -
+        (inventoryOrderRef.current.get(String(right.inventoryId || right.id || right._id)) ?? 0)
+      ))
+    ));
+
+    setSelectedDish((current) => current || restoredDish);
+  };
+
+  const handleCheck = async () => {
+    if (result || items.length === 0) return;
+
+    try {
+      const payload = items.map(({ type, name, icon, x, y, width, height, rotation, zIndex }) => ({
+        type,
+        name,
+        icon,
+        x,
+        y,
+        width,
+        height,
+        rotation,
+        zIndex,
+      }));
+
+      const response = await onSubmit(payload);
+      const mergedItems = items.map((item, index) => ({
+        ...item,
+        isCorrect: response.validatedItems?.[index]?.isCorrect ?? false,
+      }));
+
+      setItems(mergedItems);
+      setGhostItems(response.ghostItems || []);
+      setSemanticFeedback(response.semanticFeedback || null);
+
+      const nextResult = {
+        score: response.score,
+        total: response.total,
+        percentage: response.percentage,
+        passed: response.passed,
+        semanticFeedback: response.semanticFeedback || null,
+        submittedItems: payload,
+      };
+
+      setResult(nextResult);
+      onResult?.(nextResult);
+    } catch (error) {
+      console.error('Desk check error:', error);
+      alert('Помилка при перевірці');
+    }
+  };
+
+  handleCheckRef.current = handleCheck;
+
+  return (
+    <div className={`virtual-desk-container student-test ${result ? 'has-result' : ''}`} style={embedded ? { flex: 1 } : {}}>
+      <header className="desk-header">
+        <div className="header-info">
+          {description && (
+            <div style={{ background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.2)', borderRadius: '10px', padding: '0.6rem 1rem', marginBottom: '0.4rem', fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.4 }}>
+              📋 {description}
             </div>
+          )}
+          <p>На столі: {items.length} предметів</p>
         </div>
-    );
+        <div className="header-actions">
+          {timeLeft !== null && !result && (
+            <span className={`test-timer ${timeLeft < 60 ? 'timer-warning' : ''}`} style={{ fontSize: '1.4rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+              ⏱ {formatTime(timeLeft)}
+            </span>
+          )}
+          {!result && (
+            <button className="btn-add" onClick={handleCheck} disabled={items.length === 0}>
+              Перевірити результат
+            </button>
+          )}
+          {result && nextButton}
+        </div>
+      </header>
+
+      <div className="desk-body">
+        <aside className="desk-panel inventory-panel">
+          <div className="panel-label">Посуд</div>
+          <div className="inventory-grid">
+            {availableDishes.map((dish) => (
+              <div
+                key={dish.inventoryId || dish.id || dish._id}
+                className={`inv-item ${selectedDish && (selectedDish.inventoryId || selectedDish.id || selectedDish._id) === (dish.inventoryId || dish.id || dish._id) ? 'active' : ''}`}
+                onClick={() => !result && setSelectedDish(dish)}
+              >
+                <span className="inv-icon">
+                  {dish.icon && (dish.icon.startsWith('http') || dish.icon.startsWith('/uploads')) ? (
+                    <img
+                      src={dish.icon.startsWith('http') ? dish.icon : `${API_URL.replace('/api', '')}${dish.icon}`}
+                      alt={dish.name}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        transform: `rotate(${(((dish.rotation || 0) % 360) + 360) % 360}deg)`,
+                      }}
+                    />
+                  ) : (
+                    dish.icon || '🍽️'
+                  )}
+                </span>
+                <span className="inv-name">{dish.name}</span>
+              </div>
+            ))}
+            {availableDishes.length === 0 && <div className="sidebar-empty">Немає посуду</div>}
+          </div>
+        </aside>
+
+        <DeskScene
+          items={items}
+          underlays={underlays}
+          dishes={dishes}
+          ghostItems={result ? ghostItems : []}
+          surfacePreset={deskSurfacePreset}
+          surfaceColor={deskSurfaceColor}
+          onDeskClick={handleDeskClick}
+          allowDeskClickThroughItems
+          onDeleteItem={(event, item) => {
+            event.stopPropagation();
+            handleDelete(item._id);
+          }}
+          showDeleteControl={!result}
+          emptyIcon="📋"
+          emptyLabel="Розпочніть сервірування"
+        />
+
+        {result && (
+          <aside className="desk-panel results-panel">
+            <div className="panel-label">Результат</div>
+            <div className="result-card">
+              <div className="result-score" style={{ color: result.passed ? '#4ade80' : '#f87171' }}>
+                {result.percentage}%
+              </div>
+              <p>Правильно: {result.score} з {result.total}</p>
+              <p className="result-status">
+                {result.passed ? 'Пройдено' : 'Не пройдено'}
+              </p>
+              {semanticFeedback?.summary && (
+                <div style={{ marginTop: '1rem', textAlign: 'left', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                  <strong>Підказки:</strong>
+                  {semanticFeedback.issues?.map((issue, index) => (
+                    <div key={`${issue.type}-${index}`} style={{ marginTop: '0.45rem' }}>
+                      • {issue.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default DeskEngine;

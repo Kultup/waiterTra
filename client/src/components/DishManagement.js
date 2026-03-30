@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import API_URL from '../api';
 import ConfirmModal from './ConfirmModal';
@@ -10,12 +10,14 @@ const PRESET_ICONS = [
     '🥡', '🥢', '🍱', '🍻', '🥃', '🍾', '🥤', '🍞'
 ];
 
+const normalizeRotation = (value) => ((value % 360) + 360) % 360;
+
 const DishManagement = () => {
     const [dishes, setDishes] = useState([]);
     const [editingDish, setEditingDish] = useState(null);
     const [name, setName] = useState('');
     const [icon, setIcon] = useState('🍽️');
-    
+    const [rotation, setRotation] = useState(0);
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, idToDelete: null });
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef(null);
@@ -38,15 +40,32 @@ const DishManagement = () => {
         }
     };
 
+    const resetForm = () => {
+        setEditingDish(null);
+        setName('');
+        setIcon('🍽️');
+        setRotation(0);
+    };
+
+    const handleRotate = (delta) => {
+        setRotation((current) => normalizeRotation(current + delta));
+    };
+
     const handleSave = async (e) => {
         e.preventDefault();
-        if (!name.trim()) return toast.error('Введіть назву предмету');
+        if (!name.trim()) {
+            return toast.error('Введіть назву предмету');
+        }
 
         try {
             const token = localStorage.getItem('token');
-            const payload = { name: name.trim(), icon: icon || '🍽️' };
+            const payload = {
+                name: name.trim(),
+                icon,
+                rotation: normalizeRotation(rotation),
+            };
             const config = { headers: { Authorization: `Bearer ${token}` } };
-            
+
             if (editingDish) {
                 await axios.put(`${API_URL}/dishes/${editingDish._id}`, payload, config);
                 toast.success('Предмет оновлено успішно!');
@@ -54,7 +73,7 @@ const DishManagement = () => {
                 await axios.post(`${API_URL}/dishes`, payload, config);
                 toast.success('Предмет додано успішно!');
             }
-            
+
             resetForm();
             fetchDishes();
         } catch (err) {
@@ -66,7 +85,9 @@ const DishManagement = () => {
     const handleConfirmDelete = async () => {
         const id = confirmModal.idToDelete;
         if (!id) return;
+
         setConfirmModal({ isOpen: false, idToDelete: null });
+
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/dishes/${id}`, {
@@ -84,20 +105,15 @@ const DishManagement = () => {
         setEditingDish(dish);
         setName(dish.name);
         setIcon(dish.icon || '🍽️');
+        setRotation(normalizeRotation(dish.rotation || 0));
     };
 
     const deleteClick = (id) => {
         setConfirmModal({ isOpen: true, idToDelete: id });
     };
 
-    const resetForm = () => {
-        setEditingDish(null);
-        setName('');
-        setIcon('🍽️');
-    };
-
     const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files?.[0];
         if (!file) return;
 
         const formData = new FormData();
@@ -113,6 +129,7 @@ const DishManagement = () => {
                 }
             });
             setIcon(res.data.url);
+            setRotation(0);
             toast.success('Іконку завантажено!');
         } catch (err) {
             console.error(err);
@@ -123,25 +140,53 @@ const DishManagement = () => {
         }
     };
 
-    const renderIcon = (iconValue, className = "") => {
+    const renderIcon = (iconValue, options = {}) => {
         if (!iconValue) return null;
+
+        const {
+            className = '',
+            rotationValue = 0,
+        } = options;
         const isUrl = iconValue.startsWith('http') || iconValue.startsWith('/uploads');
+        const normalizedRotation = normalizeRotation(rotationValue);
+
         if (isUrl) {
             const baseUrl = API_URL.replace('/api', '');
             const fullUrl = iconValue.startsWith('http') ? iconValue : `${baseUrl}${iconValue}`;
-            return <img src={fullUrl} alt="icon" className={className} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />;
+            return (
+                <img
+                    src={fullUrl}
+                    alt="icon"
+                    className={className}
+                    style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        transform: `rotate(${normalizedRotation}deg)`,
+                    }}
+                />
+            );
         }
-        return <span className={className}>{iconValue}</span>;
+
+        return (
+            <span
+                className={className}
+                style={{ transform: `rotate(${normalizedRotation}deg)` }}
+            >
+                {iconValue}
+            </span>
+        );
     };
+
+    const isPhotoIcon = icon.startsWith('http') || icon.startsWith('/uploads');
 
     return (
         <div className="dish-management-container">
             <header className="content-header">
                 <h2>🍽️ Керування предметами столу</h2>
             </header>
-            
+
             <div className="dish-layout">
-                {/* ─ Form ─ */}
                 <div className="dish-form-card">
                     <h3>{editingDish ? 'Редагувати предмет' : 'Додати новий предмет'}</h3>
                     <form onSubmit={handleSave}>
@@ -150,60 +195,101 @@ const DishManagement = () => {
                             <input
                                 type="text"
                                 value={name}
-                                onChange={e => setName(e.target.value)}
+                                onChange={(e) => setName(e.target.value)}
                                 placeholder="Напр. Бокал для вина"
                             />
                         </div>
+
                         <div className="form-group">
                             <label>Іконка (Емодзі або фото)</label>
                             <div className="icon-selector">
-                                {PRESET_ICONS.map(i => (
+                                {PRESET_ICONS.map((presetIcon) => (
                                     <button
                                         type="button"
-                                        key={i}
-                                        className={`icon-btn ${icon === i ? 'active' : ''}`}
-                                        onClick={() => setIcon(i)}
+                                        key={presetIcon}
+                                        className={`icon-btn ${icon === presetIcon ? 'active' : ''}`}
+                                        onClick={() => {
+                                            setIcon(presetIcon);
+                                            setRotation(0);
+                                        }}
                                     >
-                                        {i}
+                                        {presetIcon}
                                     </button>
                                 ))}
+
                                 <input
                                     type="text"
-                                    value={icon.startsWith('/uploads') ? '🖼️ Фото' : icon}
-                                    onChange={e => setIcon(e.target.value)}
+                                    value={isPhotoIcon ? '🖼️ Фото' : icon}
+                                    onChange={(e) => {
+                                        setIcon(e.target.value);
+                                        setRotation(0);
+                                    }}
                                     placeholder="Своє 💎"
                                     className="custom-icon-input"
                                     maxLength={4}
-                                    disabled={icon.startsWith('/uploads')}
+                                    disabled={isPhotoIcon}
                                 />
-                                <input 
-                                    type="file" 
-                                    ref={fileInputRef} 
-                                    onChange={handleFileUpload} 
-                                    style={{ display: 'none' }} 
+
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={handleFileUpload}
+                                    style={{ display: 'none' }}
                                     accept="image/*"
                                 />
-                                <button 
-                                    type="button" 
-                                    className="btn-upload-icon" 
-                                    onClick={() => fileInputRef.current.click()}
+
+                                <button
+                                    type="button"
+                                    className="btn-upload-icon"
+                                    onClick={() => fileInputRef.current?.click()}
                                     disabled={uploading}
                                 >
                                     {uploading ? '⌛' : '📷'}
                                 </button>
-                                {icon.startsWith('/uploads') && (
-                                    <button 
-                                        type="button" 
-                                        className="btn-remove-icon" 
-                                        onClick={() => setIcon('🍽️')}
-                                    >
-                                        🗑️
-                                    </button>
+
+                                {isPhotoIcon && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className="btn-rotate-icon"
+                                            onClick={() => handleRotate(-90)}
+                                            title="Повернути вліво"
+                                        >
+                                            -90°
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn-rotate-icon"
+                                            onClick={() => handleRotate(90)}
+                                            title="Повернути вправо"
+                                        >
+                                            +90°
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn-remove-icon"
+                                            onClick={() => {
+                                                setIcon('🍽️');
+                                                setRotation(0);
+                                            }}
+                                        >
+                                            🗑️
+                                        </button>
+                                    </>
                                 )}
                             </div>
-                            {icon.startsWith('/uploads') && (
+
+                            {isPhotoIcon && (
+                                <div className="icon-preview-tools">
+                                    <span className="rotation-indicator">Поворот: {normalizeRotation(rotation)}°</span>
+                                </div>
+                            )}
+
+                            {isPhotoIcon && (
                                 <div className="icon-preview-large">
-                                    {renderIcon(icon)}
+                                    <div className="icon-preview-stage">
+                                        {renderIcon(icon, { rotationValue: rotation })}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -221,7 +307,6 @@ const DishManagement = () => {
                     </form>
                 </div>
 
-                {/* ─ List ─ */}
                 <div className="dish-list-card">
                     <h3>Збережені предмети ({dishes.length})</h3>
                     {dishes.length === 0 ? (
@@ -230,13 +315,14 @@ const DishManagement = () => {
                         </div>
                     ) : (
                         <div className="dish-grid">
-                            {dishes.map(dish => (
+                            {dishes.map((dish) => (
                                 <div key={dish._id} className="dish-item-card">
                                     <div className="dish-icon-preview">
-                                        {renderIcon(dish.icon)}
+                                        {renderIcon(dish.icon, { rotationValue: dish.rotation || 0 })}
                                     </div>
                                     <div className="dish-details">
                                         <h4>{dish.name}</h4>
+                                        <span>Поворот: {normalizeRotation(dish.rotation || 0)}°</span>
                                         <span>Додано: {new Date(dish.createdAt).toLocaleDateString()}</span>
                                     </div>
                                     <div className="dish-actions">

@@ -133,7 +133,8 @@
 }
 
 .btn-upload-icon,
-.btn-remove-icon {
+.btn-remove-icon,
+.btn-rotate-icon {
     width: 40px;
     height: 40px;
     border-radius: 8px;
@@ -153,9 +154,27 @@
     border-color: #38bdf8;
 }
 
+.btn-rotate-icon:hover {
+    background: rgba(99, 102, 241, 0.18);
+    border-color: rgba(99, 102, 241, 0.75);
+}
+
 .btn-remove-icon:hover {
     background: rgba(239, 68, 68, 0.2);
     border-color: #ef4444;
+}
+
+.icon-preview-tools {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.rotation-indicator {
+    font-size: 0.85rem;
+    color: #94a3b8;
 }
 
 .icon-preview-large {
@@ -170,6 +189,14 @@
     justify-content: center;
     overflow: hidden;
     padding: 10px;
+}
+
+.icon-preview-stage {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* Actions */
@@ -272,6 +299,12 @@
     font-weight: 600;
     color: #fff;
     word-break: break-word;
+}
+
+.dish-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .dish-details span {

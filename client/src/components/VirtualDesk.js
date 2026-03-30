@@ -1,627 +1,973 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import './VirtualDesk.css';
 import API_URL, { getUserPlatform } from '../api';
+import DeskModal from './virtualDesk/DeskModal';
+import InventoryPanel from './virtualDesk/InventoryPanel';
+import DeskCanvas from './virtualDesk/DeskCanvas';
+import TemplatesPanel from './virtualDesk/TemplatesPanel';
+import { SURFACE_PRESETS } from './virtualDesk/surfacePresets';
 
-const Modal = ({ show, title, onClose, onConfirm, children }) => {
-    if (!show) return null;
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h2>{title}</h2>
-                    <button className="modal-close" onClick={onClose}>×</button>
-                </div>
-                <div className="modal-body">{children}</div>
-                <div className="modal-footer">
-                    <button className="btn-cancel" onClick={onClose}>Скасувати</button>
-                    <button className="btn-confirm" onClick={onConfirm}>Підтвердити</button>
-                </div>
-            </div>
-        </div>
-    );
+const buildTemplateItems = (items, dishes) => (
+  items.map(({ name, icon, x, y, type, id, width, height, rotation, zIndex }) => {
+    const matchedDish = dishes.find((dish) => String(dish._id || dish.id) === String(type));
+
+    return {
+      id: id || `item_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      name,
+    icon: icon || dishes.find((dish) => String(dish._id) === String(type))?.icon || '🍽️',
+      x,
+      y,
+      type,
+      width: width ?? matchedDish?.width ?? 40,
+      height: height ?? matchedDish?.height ?? 40,
+      rotation: rotation ?? matchedDish?.rotation ?? 0,
+      zIndex: zIndex ?? 0,
+    };
+  })
+);
+
+const buildTemplateUnderlays = (underlays) => (
+  underlays.map(({ id, name, image, x, y, width, height, rotation, zIndex }) => ({
+    id: id || `underlay_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    name: name || 'Підкладка',
+    image,
+    x,
+    y,
+    width: width ?? 180,
+    height: height ?? 180,
+    rotation: rotation ?? 0,
+    zIndex: zIndex ?? -10,
+  }))
+);
+
+const snapToGrid = (value) => Math.round(value / 10) * 10;
+const DEFAULT_SURFACE_COLORS = ['#ffffff', '#f7f4ee', '#f3f4f6', '#efe7da', '#dbeafe', '#fee2e2'];
+const SURFACE_PRESET_COLORS = {
+  transparent: '#ffffff',
+  walnut: '#8b6a4f',
+  oak: '#c9a27a',
+  marble: '#f3f4f6',
+  linen: '#f7f4ee',
+  slate: '#6b7280',
 };
-
 const VirtualDesk = () => {
-    const [items, setItems] = useState([]);
-    const [templates, setTemplates] = useState([]);
-    const [dishes, setDishes] = useState([]);
-    const [selectedDish, setSelectedDish] = useState(null);
-    const [editingTemplateId, setEditingTemplateId] = useState(null);
-    const [templateName, setTemplateName] = useState('');
-    const [timeLimit, setTimeLimit] = useState(0);
-    const [description, setDescription] = useState('');
-    const [targetCity, setTargetCity] = useState('');
-    const [cities, setCities] = useState([]);
-    const [filterCity, setFilterCity] = useState('');
-    const [user, setUser] = useState(null);
-    const [copyStatus, setCopyStatus] = useState(null);
-    const [multiCopyStatus, setMultiCopyStatus] = useState(false);
-    const [templatesOpen, setTemplatesOpen] = useState(true);
-    const [modalConfig, setModalConfig] = useState({
-        show: false, title: '', type: '', data: null
+  const [items, setItems] = useState([]);
+  const [underlays, setUnderlays] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [dishes, setDishes] = useState([]);
+  const [selectedDish, setSelectedDish] = useState(null);
+  const [editingTemplateId, setEditingTemplateId] = useState(null);
+  const [templateName, setTemplateName] = useState('');
+  const [timeLimit, setTimeLimit] = useState(0);
+  const [description, setDescription] = useState('');
+  const [deskSurfacePreset, setDeskSurfacePreset] = useState('walnut');
+  const [deskSurfaceColor, setDeskSurfaceColor] = useState('#ffffff');
+  const [targetCity, setTargetCity] = useState('');
+  const [cities, setCities] = useState([]);
+  const [filterCity, setFilterCity] = useState('');
+  const [user, setUser] = useState(null);
+  const [copyStatus, setCopyStatus] = useState(null);
+  const [multiCopyStatus, setMultiCopyStatus] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(true);
+  const [draggingItemId, setDraggingItemId] = useState(null);
+  const [selectedItemId, setSelectedItemId] = useState(null);
+  const [selectedUnderlayId, setSelectedUnderlayId] = useState(null);
+  const [deskVisualStateLoaded, setDeskVisualStateLoaded] = useState(false);
+  const [modalConfig, setModalConfig] = useState({
+    show: false,
+    title: '',
+    type: '',
+    data: null,
+  });
+  const underlayInputRef = useRef(null);
+
+  const getAuthConfig = useCallback(() => {
+    const token = localStorage.getItem('token');
+    return { headers: { Authorization: `Bearer ${token}` } };
+  }, []);
+
+  const resetEditorState = () => {
+    setEditingTemplateId(null);
+    setTemplateName('');
+    setTimeLimit(0);
+    setDescription('');
+    setSelectedItemId(null);
+    setSelectedUnderlayId(null);
+    setTargetCity('');
+  };
+
+  const resetDeskSurfaceState = useCallback(() => {
+    setDeskSurfacePreset('walnut');
+    setDeskSurfaceColor('#ffffff');
+  }, []);
+
+  const applyDeskVisualState = useCallback((source = {}) => {
+    setUnderlays(source.underlays || []);
+    setDeskSurfacePreset(source.deskSurfacePreset || source.templateSnapshot?.deskSurfacePreset || 'walnut');
+    setDeskSurfaceColor(source.deskSurfaceColor || source.templateSnapshot?.deskSurfaceColor || '#ffffff');
+  }, []);
+
+  const buildTemplatePayload = () => ({
+    templateName: templateName.trim(),
+    name: templateName.trim(),
+  items: buildTemplateItems(items, dishes),
+    underlays: buildTemplateUnderlays(underlays),
+    timeLimit,
+    description,
+    deskSurfacePreset,
+    deskSurfaceColor,
+    targetCity: user?.role === 'superadmin' ? targetCity : undefined,
+  });
+
+  const fetchUser = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/auth/me`, getAuthConfig());
+      setUser(response.data);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [getAuthConfig]);
+
+  const fetchItems = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/desk-items`, getAuthConfig());
+      setItems(response.data || []);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [getAuthConfig]);
+
+  const persistDeskVisualState = useCallback(async ({
+    nextUnderlays = underlays,
+    nextSurfacePreset = deskSurfacePreset,
+    nextSurfaceColor = deskSurfaceColor,
+  } = {}) => {
+    if (!deskVisualStateLoaded) return;
+
+    try {
+      await axios.put(
+        `${API_URL}/desk-state`,
+        {
+          underlays: buildTemplateUnderlays(nextUnderlays),
+          deskSurfacePreset: nextSurfacePreset,
+          deskSurfaceColor: nextSurfaceColor,
+        },
+        getAuthConfig()
+      );
+    } catch (error) {
+      console.error('Failed to persist desk visual state:', error);
+    }
+  }, [deskSurfaceColor, deskSurfacePreset, deskVisualStateLoaded, getAuthConfig, underlays]);
+
+  const fetchDeskVisualState = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/desk-state`, getAuthConfig());
+      applyDeskVisualState(response.data || {});
+    } catch (error) {
+      console.error('Failed to fetch desk visual state:', error);
+      applyDeskVisualState();
+    } finally {
+      setDeskVisualStateLoaded(true);
+    }
+  }, [applyDeskVisualState, getAuthConfig]);
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/templates`, getAuthConfig());
+      setTemplates(response.data);
+    } catch (error) {
+      console.error('Fetch error:', error);
+    }
+  }, [getAuthConfig]);
+
+  const fetchCities = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`);
+      setCities(response.data);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const fetchDishes = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/dishes`, getAuthConfig());
+      setDishes(response.data);
+      if (response.data.length > 0) {
+        setSelectedDish((current) => current || response.data[0]);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }, [getAuthConfig]);
+
+  useEffect(() => {
+    fetchUser();
+    fetchItems();
+    fetchDeskVisualState();
+    fetchTemplates();
+    fetchCities();
+    fetchDishes();
+  }, [fetchUser, fetchItems, fetchDeskVisualState, fetchTemplates, fetchCities, fetchDishes]);
+
+  const handleDeskClick = async (event) => {
+    if (!selectedDish) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = snapToGrid(((event.clientX - rect.left) / rect.width) * 500);
+    const y = snapToGrid(((event.clientY - rect.top) / rect.height) * 500);
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/desk-items`,
+        {
+          name: selectedDish.name,
+          icon: selectedDish.icon,
+          x,
+          y,
+          type: selectedDish._id || selectedDish.id || 'custom',
+          width: selectedDish.width ?? 40,
+          height: selectedDish.height ?? 40,
+          rotation: selectedDish.rotation ?? 0,
+          zIndex: items.length,
+        },
+        getAuthConfig()
+      );
+      setItems((current) => [...current, response.data]);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleItemPreview = (id, updates) => {
+    setDraggingItemId(id);
+    setSelectedItemId(id);
+    setItems((current) => current.map((item) => (
+      item._id === id ? { ...item, ...updates } : item
+    )));
+  };
+
+  const handleItemCommit = async (id, updates) => {
+    try {
+      await axios.patch(`${API_URL}/desk-items/${id}`, updates, getAuthConfig());
+    } catch (error) {
+      console.error(error);
+      await fetchItems();
+    } finally {
+      setDraggingItemId(null);
+    }
+  };
+
+  const applyLayerUpdates = async (updates) => {
+    if (!updates.length) return;
+
+    const nextItems = items.map((item) => {
+      const next = updates.find((update) => update.kind === 'item' && update.id === item._id);
+      return next ? { ...item, zIndex: next.zIndex } : item;
     });
 
-    useEffect(() => {
-        fetchUser();
-        fetchItems();
+    const nextUnderlays = underlays.map((underlay) => {
+      const next = updates.find((update) => update.kind === 'underlay' && update.id === underlay.id);
+      return next ? { ...underlay, zIndex: next.zIndex } : underlay;
+    });
+
+    setItems(nextItems);
+    setUnderlays(nextUnderlays);
+
+    const itemUpdates = updates.filter((update) => update.kind === 'item');
+    await Promise.all(itemUpdates.map((update) => (
+      axios.patch(`${API_URL}/desk-items/${update.id}`, { zIndex: update.zIndex }, getAuthConfig())
+    )));
+
+    if (updates.some((update) => update.kind === 'underlay')) {
+      await persistDeskVisualState({ nextUnderlays });
+    }
+  };
+
+  const moveSelectedLayer = async (direction) => {
+    const activeLayer = selectedItemId
+      ? { kind: 'item', id: selectedItemId }
+      : selectedUnderlayId
+        ? { kind: 'underlay', id: selectedUnderlayId }
+        : null;
+
+    if (!activeLayer) return;
+
+    const layers = [
+      ...underlays.map((underlay) => ({ kind: 'underlay', id: underlay.id, zIndex: underlay.zIndex ?? -10 })),
+      ...items.map((item) => ({ kind: 'item', id: item._id, zIndex: item.zIndex ?? 0 })),
+    ].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+
+    const currentIndex = layers.findIndex((layer) => layer.kind === activeLayer.kind && layer.id === activeLayer.id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex + 1 : currentIndex - 1;
+    if (targetIndex < 0 || targetIndex >= layers.length) return;
+
+    const reorderedLayers = [...layers];
+    [reorderedLayers[currentIndex], reorderedLayers[targetIndex]] = [reorderedLayers[targetIndex], reorderedLayers[currentIndex]];
+
+    const normalizedUpdates = reorderedLayers.map((layer, index) => ({
+      ...layer,
+      zIndex: index,
+    }));
+
+    const changedUpdates = normalizedUpdates.filter((layer, index) => layer.id !== layers[index]?.id || layer.kind !== layers[index]?.kind);
+    await applyLayerUpdates(changedUpdates);
+  };
+
+  const moveSelectedItemToFront = async () => {
+    await moveSelectedLayer('up');
+  };
+
+  const moveSelectedItemToBack = async () => {
+    await moveSelectedLayer('down');
+  };
+
+  const handleDeleteItem = async (event, id) => {
+    event.stopPropagation();
+    try {
+      await axios.delete(`${API_URL}/desk-items/${id}`, getAuthConfig());
+      setItems((current) => current.filter((item) => item._id !== id));
+      if (selectedItemId === id) {
+        setSelectedItemId(null);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleUnderlayPreview = (id, updates) => {
+    setSelectedUnderlayId(id);
+    setSelectedItemId(null);
+    setUnderlays((current) => current.map((underlay) => (
+      underlay.id === id ? { ...underlay, ...updates } : underlay
+    )));
+  };
+
+  const handleUnderlayCommit = async (id, updates) => {
+    const nextUnderlays = underlays.map((underlay) => (
+      underlay.id === id ? { ...underlay, ...updates } : underlay
+    ));
+
+    setUnderlays(nextUnderlays);
+    await persistDeskVisualState({ nextUnderlays });
+  };
+
+  const handleDeleteUnderlay = async (event, id) => {
+    event.stopPropagation();
+    const nextUnderlays = underlays.filter((underlay) => underlay.id !== id);
+
+    setUnderlays(nextUnderlays);
+    if (selectedUnderlayId === id) {
+      setSelectedUnderlayId(null);
+    }
+    await persistDeskVisualState({ nextUnderlays });
+  };
+
+  const handleAddUnderlayClick = () => {
+    underlayInputRef.current?.click();
+  };
+
+  const handleUnderlayUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await axios.post(`${API_URL}/upload`, formData, {
+        ...getAuthConfig(),
+        headers: {
+          ...getAuthConfig().headers,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const nextUnderlay = {
+        id: `underlay_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name: file.name.replace(/\.[^.]+$/, '') || 'Підкладка',
+        image: response.data.url,
+        x: 250,
+        y: 250,
+        width: 220,
+        height: 160,
+        rotation: 0,
+        zIndex: -10,
+      };
+
+      const nextUnderlays = [...underlays, nextUnderlay];
+
+      setUnderlays(nextUnderlays);
+      setSelectedUnderlayId(nextUnderlay.id);
+      setSelectedItemId(null);
+      await persistDeskVisualState({ nextUnderlays });
+    } catch (error) {
+      console.error(error);
+      alert('Помилка при завантаженні підкладки');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleClearDesk = () => {
+    setModalConfig({ show: true, title: 'Очистити стіл', type: 'clear', data: null });
+  };
+
+  const handleSaveTemplateClick = async () => {
+    if (!editingTemplateId) {
+      setModalConfig({ show: true, title: 'Зберегти як шаблон', type: 'save', data: null });
+      return;
+    }
+
+    if (!templateName.trim()) {
+      alert('Введіть назву шаблону');
+      return;
+    }
+
+    try {
+      await axios.put(`${API_URL}/templates/${editingTemplateId}`, buildTemplatePayload(), getAuthConfig());
+      resetEditorState();
+      fetchTemplates();
+    } catch (error) {
+      console.error(error);
+      alert('Помилка при оновленні шаблону');
+    }
+  };
+
+  const loadTemplateToDesk = async (template) => {
+    await axios.delete(`${API_URL}/desk-items`, getAuthConfig());
+
+    const filteredItems = (template.items || []).filter((item) => (
+      dishes.some((dish) => String(dish._id) === String(item.type))
+    ));
+
+    const newItems = await Promise.all(filteredItems.map((item) => {
+      const fallbackIcon = item.icon || dishes.find((dish) => String(dish._id) === String(item.type))?.icon || '🍽️';
+      return axios.post(`${API_URL}/desk-items`, { ...item, icon: fallbackIcon }, getAuthConfig());
+    }));
+
+    const nextItems = newItems.map((response) => response.data);
+    const nextUnderlays = template.underlays || [];
+    const nextSurfacePreset = template.deskSurfacePreset || template.templateSnapshot?.deskSurfacePreset || 'walnut';
+    const nextSurfaceColor = template.deskSurfaceColor || template.templateSnapshot?.deskSurfaceColor || '#ffffff';
+
+    setItems(nextItems);
+    applyDeskVisualState(template);
+    setSelectedItemId(null);
+    setSelectedUnderlayId(null);
+    await persistDeskVisualState({
+      nextUnderlays,
+      nextSurfacePreset,
+      nextSurfaceColor,
+    });
+  };
+
+  const handleConfirmModal = async () => {
+    const { type, data } = modalConfig;
+
+    try {
+      if (type === 'save') {
+        if (!templateName.trim()) {
+          alert('Введіть назву шаблону');
+          return;
+        }
+
+        await axios.post(`${API_URL}/templates`, buildTemplatePayload(), getAuthConfig());
+        resetEditorState();
         fetchTemplates();
-        fetchCities();
-        fetchDishes();
-    }, []);
-
-    const fetchUser = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/auth/me`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setUser(res.data);
-        } catch (e) { console.error(e); }
-    };
-
-    const fetchItems = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/desk-items`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setItems(res.data || []);
-        } catch (e) { console.error(e); }
-    };
-
-    const fetchTemplates = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/templates`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setTemplates(res.data);
-        } catch (err) {
-            console.error('Fetch error:', err);
-        }
-    };
-
-    const fetchCities = async () => {
-        try {
-            const res = await axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`);
-            setCities(res.data);
-        } catch (err) { console.error(err); }
-    };
-
-    const fetchDishes = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/dishes`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setDishes(res.data);
-            if (res.data.length > 0) setSelectedDish(res.data[0]);
-        } catch (err) { console.error(err); }
-    };
-
-    const handleDeskClick = async (e) => {
-        if (!selectedDish) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 500;
-        const y = ((e.clientY - rect.top) / rect.height) * 500;
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/desk-items`, {
-                name: selectedDish.name, icon: selectedDish.icon, x, y, type: selectedDish._id || 'custom'
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setItems(prev => [...prev, res.data]);
-        } catch (e) { console.error(e); }
-    };
-
-    const handleDeleteItem = async (e, id) => {
-        e.stopPropagation();
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/desk-items/${id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setItems(prev => prev.filter(i => i._id !== id));
-        } catch (e) { console.error(e); }
-    };
-
-    const handleClearDesk = () => {
-        setModalConfig({ show: true, title: 'Очистити стіл', type: 'clear', data: null });
-    };
-
-    const handleSaveTemplateClick = async () => {
-        if (editingTemplateId) {
-            // Зберегти відразу без модалки
-            if (!templateName.trim()) { alert('Введіть назву шаблону'); return; }
-            try {
-                const token = localStorage.getItem('token');
-                const config = { headers: { Authorization: `Bearer ${token}` } };
-                const payload = {
-                    templateName: templateName.trim(),
-                    name: templateName.trim(),
-                    items: items.map(({ name, icon, x, y, type, id, width, height }) => ({
-                        id: id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-                        name,
-                        icon: icon || dishes.find(d => String(d._id) === String(type))?.icon || '🍽️',
-                        x, y, type, width: width || 100, height: height || 100
-                    })),
-                    timeLimit,
-                    description,
-                    targetCity: user?.role === 'superadmin' ? targetCity : undefined
-                };
-
-                await axios.put(`${API_URL}/templates/${editingTemplateId}`, payload, config);
-                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setDescription(''); setTargetCity('');
-                fetchTemplates();
-            } catch (e) {
-                console.error(e);
-                alert('Помилка при оновленні шаблону');
-            }
-            return;
+      } else if (type === 'load' || type === 'edit') {
+        if (type === 'edit') {
+          setEditingTemplateId(data._id);
+          setTemplateName(data.templateName || data.name || '');
+          setTimeLimit(data.timeLimit || 0);
+          setDescription(data.description || '');
+          setTargetCity(data.targetCity || '');
+        } else {
+          resetEditorState();
         }
 
-        setTemplateName('');
-        setTimeLimit(0);
-        setDescription('');
-        setTargetCity('');
-        setModalConfig({
-            show: true,
-            title: 'Зберегти як шаблон',
-            type: 'save', data: null
+        await loadTemplateToDesk(data);
+      } else if (type === 'delete') {
+        await axios.delete(`${API_URL}/templates/${data}`, getAuthConfig());
+        setTemplates((current) => current.filter((template) => template._id !== data));
+
+        if (editingTemplateId === data) {
+          resetEditorState();
+        }
+      } else if (type === 'clear') {
+        await axios.delete(`${API_URL}/desk-items`, getAuthConfig());
+        setItems([]);
+        setUnderlays([]);
+        resetDeskSurfaceState();
+        resetEditorState();
+        await persistDeskVisualState({
+          nextUnderlays: [],
+          nextSurfacePreset: 'walnut',
+          nextSurfaceColor: '#ffffff',
         });
-    };
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Помилка при виконанні дії');
+    } finally {
+      setModalConfig((current) => ({ ...current, show: false }));
+    }
+  };
 
-    const handleConfirmModal = async () => {
-        const { type, data } = modalConfig;
-        try {
-            const token = localStorage.getItem('token');
-            const config = { headers: { Authorization: `Bearer ${token}` } };
+  const generateTestUrl = async (templateId) => {
+    const template = templates.find((entry) => entry._id === templateId);
+    const response = await axios.post(
+      `${API_URL}/tests`,
+      {
+        templateId,
+        templateName: template?.name || template?.templateName || 'Шаблон',
+        targetCity: template?.targetCity || '',
+      },
+      getAuthConfig()
+    );
 
-            if (type === 'save') {
-                if (!templateName.trim()) { alert('Введіть назву шаблону'); return; }
-                const payload = {
-                    templateName: templateName.trim(),
-                    name: templateName.trim(),
-                    items: items.map(({ name, icon, x, y, type, id, width, height }) => ({
-                        id: id || `item_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-                        name,
-                        icon: icon || dishes.find(d => String(d._id) === String(type))?.icon || '🍽️',
-                        x, y, type, width: width || 100, height: height || 100
-                    })),
-                    timeLimit,
-                    description,
-                    targetCity: user?.role === 'superadmin' ? targetCity : undefined
-                };
-                await axios.post(`${API_URL}/templates`, payload, config);
+    return `${window.location.origin}/test/${response.data.hash}`;
+  };
 
-                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setDescription(''); setTargetCity('');
-                fetchTemplates();
-            } else if (type === 'load' || type === 'edit') {
-                const template = data;
-                if (type === 'edit') {
-                    setEditingTemplateId(template._id);
-                    setTemplateName(template.templateName || template.name || '');
-                    setTimeLimit(template.timeLimit || 0);
-                    setDescription(template.description || '');
-                    setTargetCity(template.targetCity || '');
-                } else {
-                    setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
-                }
-                
-                // ATOMIC BULK CLEAR: Clear all items from DB using the new endpoint
-                await axios.delete(`${API_URL}/desk-items`, config);
+  const handleCopyLink = async (templateId) => {
+    try {
+      const url = await generateTestUrl(templateId);
+      await navigator.clipboard.writeText(url);
+      setCopyStatus(templateId);
+      setTimeout(() => setCopyStatus(null), 3000);
+    } catch (error) {
+      alert('Помилка при копіюванні');
+    }
+  };
 
-                const filteredTemplateItems = template.items.filter(i => 
-                    dishes.some(d => String(d._id) === String(i.type))
-                );
-                const newItems = await Promise.all(filteredTemplateItems.map(i => {
-                    const fallbackIcon = i.icon || dishes.find(d => String(d._id) === String(i.type))?.icon || '🍽️';
-                    return axios.post(`${API_URL}/desk-items`, { ...i, icon: fallbackIcon }, config);
-                }));
-                setItems(newItems.map(r => r.data));
-            } else if (type === 'delete') {
-                await axios.delete(`${API_URL}/templates/${data}`, config);
-                setTemplates(prev => prev.filter(t => t._id !== data));
-                if (editingTemplateId === data) {
-                    setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
-                }
-            } else if (type === 'clear') {
-                await axios.delete(`${API_URL}/desk-items`, config);
-                setItems([]);
-                setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setTargetCity('');
-            }
-        } catch (e) {
-            console.error(e);
-            alert('Помилка при виконанні дії');
-        } finally {
-            setModalConfig(prev => ({ ...prev, show: false }));
-        }
-    };
+  const handleShareTelegram = async (templateId) => {
+    try {
+      const url = await generateTestUrl(templateId);
+      window.open(
+        `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent('Запрошую пройти тест по сервіруванню столу!')}`,
+        '_blank'
+      );
+    } catch (error) {
+      alert('Помилка');
+    }
+  };
 
-    const generateTestUrl = async (templateId) => {
-        const template = templates.find(t => t._id === templateId);
-        const token = localStorage.getItem('token');
-        const res = await axios.post(`${API_URL}/tests`, {
-            templateId,
-            templateName: template?.name || template?.templateName || 'Шаблон',
-            targetCity: template?.targetCity || ''
-        }, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        return `${window.location.origin}/test/${res.data.hash}`;
-    };
+  const handleCopyAllLink = async () => {
+    if (templates.length === 0) {
+      alert('Немає збережених шаблонів');
+      return;
+    }
 
-    const handleCopyLink = async (templateId) => {
-        try {
-            const url = await generateTestUrl(templateId);
-            await navigator.clipboard.writeText(url);
-            setCopyStatus(templateId);
-            setTimeout(() => setCopyStatus(null), 3000);
-        } catch (e) { alert('Помилка при копіюванні'); }
-    };
+    try {
+      const response = await axios.post(
+        `${API_URL}/tests/multi`,
+        { templateIds: templates.map((template) => template._id), targetCity: '' },
+        getAuthConfig()
+      );
+      const url = `${window.location.origin}/multi-test/${response.data.hash}`;
+      await navigator.clipboard.writeText(url);
+      setMultiCopyStatus(true);
+      setTimeout(() => setMultiCopyStatus(false), 3000);
+    } catch (error) {
+      alert('Помилка при створенні посилання');
+    }
+  };
 
-    const handleShareTelegram = async (templateId) => {
-        try {
-            const url = await generateTestUrl(templateId);
-            window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent('Запрошую пройти тест по сервіруванню столу!')}`, '_blank');
-        } catch (e) { alert('Помилка'); }
-    };
+  const handleExportTemplate = (template) => {
+    try {
+      const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `template_${template.name || template.templateName || 'export'}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Помилка при експорті шаблону');
+    }
+  };
 
-    const handleCopyAllLink = async () => {
-        if (templates.length === 0) { alert('Немає збережених шаблонів'); return; }
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/tests/multi`, {
-                templateIds: templates.map(t => t._id),
-                targetCity: '' // Multi-links are usually global, or handle accordingly
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const url = `${window.location.origin}/multi-test/${res.data.hash}`;
-            await navigator.clipboard.writeText(url);
-            setMultiCopyStatus(true);
-            setTimeout(() => setMultiCopyStatus(false), 3000);
-        } catch (e) { alert('Помилка при створенні посилання'); }
-    };
+  const handleImportTemplate = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    const handleExportTemplate = (template) => {
-        try {
-            const dataStr = JSON.stringify(template, null, 2);
-            const blob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `template_${template.name || template.templateName || 'export'}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (e) {
-            console.error('Export error:', e);
-            alert('Помилка при експорті шаблону');
-        }
-    };
-
-    const handleImportTemplate = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try {
-                const importedData = JSON.parse(event.target.result);
-                const token = localStorage.getItem('token');
-                
-                // Clean up imported data so we can create it as new
-                const payload = {
-                    templateName: importedData.templateName || importedData.name || 'Імпортований шаблон',
-                    name: importedData.name || importedData.templateName || 'Імпортований шаблон',
-                    items: importedData.items || [],
-                    timeLimit: importedData.timeLimit || 0,
-                    targetCity: user?.role === 'superadmin' ? (importedData.targetCity || '') : undefined
-                };
-
-                await axios.post(`${API_URL}/templates`, payload, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                
-                fetchTemplates();
-                alert('Шаблон успішно імпортовано!');
-            } catch (err) {
-                console.error('Import error:', err);
-                alert('Помилка при читанні файлу шаблону. Переконайтеся, що це коректний JSON.');
-            }
+    const reader = new FileReader();
+    reader.onload = async (readerEvent) => {
+      try {
+        const importedData = JSON.parse(readerEvent.target.result);
+        const payload = {
+          templateName: importedData.templateName || importedData.name || 'Імпортований шаблон',
+          name: importedData.name || importedData.templateName || 'Імпортований шаблон',
+          items: importedData.items || [],
+          timeLimit: importedData.timeLimit || 0,
+          description: importedData.description || '',
+          deskSurfacePreset: importedData.deskSurfacePreset || 'walnut',
+          deskSurfaceColor: importedData.deskSurfaceColor || '#ffffff',
+          underlays: importedData.underlays || [],
+          targetCity: user?.role === 'superadmin' ? (importedData.targetCity || '') : undefined,
         };
-        reader.readAsText(file);
-        // Reset file input
-        e.target.value = '';
+
+        await axios.post(`${API_URL}/templates`, payload, getAuthConfig());
+        fetchTemplates();
+        alert('Шаблон успішно імпортовано');
+      } catch (error) {
+        console.error('Import error:', error);
+        alert('Помилка при читанні файлу шаблону. Переконайтеся, що це коректний JSON.');
+      }
     };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
 
-    return (
-        <div className="virtual-desk-container">
+  const openLoadTemplateModal = (template) => {
+    setModalConfig({ show: true, title: 'Завантажити шаблон', type: 'load', data: template });
+  };
 
-            {/* ── Header ── */}
-            <header className="desk-header">
-                <div className="header-info">
-                    {editingTemplateId ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ fontSize: '1.5rem' }}>✏️</span>
-                                <input
-                                    type="text"
-                                    value={templateName}
-                                    onChange={e => setTemplateName(e.target.value)}
-                                    placeholder="Назва шаблону..."
-                                    style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', fontSize: '1rem', minWidth: '200px' }}
-                                />
-                                <input
-                                    type="number"
-                                    value={timeLimit}
-                                    onChange={e => setTimeLimit(parseInt(e.target.value) || 0)}
-                                    placeholder="Час (хв)"
-                                    title="Час на проходження (хв, 0 — без обмежень)"
-                                    style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', fontSize: '1rem', width: '80px' }}
-                                />
-                            </div>
-                            <input
-                                type="text"
-                                value={description}
-                                onChange={e => setDescription(e.target.value)}
-                                placeholder="Завдання для студента (необов'язково)..."
-                                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#ccc', padding: '5px 10px', borderRadius: '5px', fontSize: '0.85rem', width: '100%' }}
-                            />
-                        </div>
-                    ) : (
-                        <>
-                            <h1>🍽️ Сервірування</h1>
-                            <p>На столі: {items.length} предмет{items.length === 1 ? '' : items.length < 5 ? 'ї' : 'ів'}</p>
-                        </>
-                    )}
-                </div>
+  const openEditTemplateModal = (template) => {
+    setModalConfig({ show: true, title: 'Редагувати шаблон', type: 'edit', data: template });
+  };
 
-                {user?.role === 'superadmin' && (
-                    <div className="header-city-selector" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                        <span style={{ fontSize: '0.8rem', color: '#888' }}>📍 Місто:</span>
-                        <select
-                            value={targetCity}
-                            onChange={(e) => setTargetCity(e.target.value)}
-                            style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '0.9rem', outline: 'none', cursor: 'pointer' }}
-                        >
-                            <option value="" style={{ color: '#000' }}>Всі міста</option>
-                            {cities.map(c => (
-                                <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                )}
+  const openDeleteTemplateModal = (templateId) => {
+    setModalConfig({ show: true, title: 'Видалити шаблон', type: 'delete', data: templateId });
+  };
 
-                <div className="header-actions">
-                    {items.length > 0 && (
-                        <button className="btn-header-ghost" onClick={handleClearDesk}>
-                            🗑 Очистити
-                        </button>
-                    )}
-                    {editingTemplateId && (
-                        <button className="btn-header-ghost btn-cancel-edit" onClick={() => {
-                            setEditingTemplateId(null); setTemplateName(''); setTimeLimit(0); setDescription('');
-                        }}>
-                            Скасувати
-                        </button>
-                    )}
-                    <button className="btn-save-template" onClick={handleSaveTemplateClick}>
-                        {editingTemplateId ? '💾 Оновити' : '💾 Зберегти'}
-                    </button>
-                </div>
-            </header>
+  const modalTemplate = templates.find((template) => template._id === modalConfig.data);
+  const selectedItem = items.find((item) => item._id === selectedItemId) || null;
+  const selectedUnderlay = underlays.find((underlay) => underlay.id === selectedUnderlayId) || null;
+  const selectedLayerLabel = selectedItem
+    ? selectedItem.name
+    : selectedUnderlay
+      ? `Підкладка: ${selectedUnderlay.name}`
+      : null;
+  const applySurfacePreset = async (presetId) => {
+    const nextSurfaceColor = presetId !== 'transparent'
+      ? (SURFACE_PRESET_COLORS[presetId] || '#ffffff')
+      : deskSurfaceColor;
 
-            {/* ── Body ── */}
-            <div className="desk-body">
+    setDeskSurfacePreset(presetId);
+    if (presetId !== 'transparent') {
+      setDeskSurfaceColor(nextSurfaceColor);
+    }
 
-                {/* Inventory (посуд) */}
-                <aside className="desk-panel inventory-panel">
-                    <div className="panel-label">Посуд</div>
-                    <div className="inventory-grid">
-                        {dishes.length === 0 ? (
-                            <p style={{ gridColumn: '1/-1', textAlign: 'center', color: '#888', padding: '20px 0' }}>Товарів немає. Додайте в меню "Посуд".</p>
-                        ) : (
-                            dishes.map(dish => (
-                                <div
-                                    key={dish._id}
-                                    className={`inv-item ${selectedDish?._id === dish._id ? 'active' : ''}`}
-                                    onClick={() => setSelectedDish(dish)}
-                                    title={dish.name}
-                                >
-                                    <span className="inv-icon">{dish.icon}</span>
-                                    <span className="inv-name">{dish.name}</span>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </aside>
+    await persistDeskVisualState({
+      nextSurfacePreset: presetId,
+      nextSurfaceColor,
+    });
+  };
 
-                {/* Desk workspace */}
-                <div className="desk-workspace">
-                    <div className="square-desk" onClick={handleDeskClick}>
-                        {items.map(item => (
-                            <div
-                                key={item._id}
-                                className="desk-item"
-                                style={{
-                                    left: `${(item.x / 500) * 100}%`,
-                                    top: `${(item.y / 500) * 100}%`
-                                }}
-                                onClick={e => e.stopPropagation()}
-                            >
-                                <span className="item-icon">
-                                    {(item.icon && (item.icon.startsWith('http') || item.icon.startsWith('/uploads'))) ? (
-                                        <img src={item.icon.startsWith('http') ? item.icon : `${API_URL.replace('/api', '')}${item.icon}`} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                    ) : (
-                                        item.icon || dishes.find(d => String(d._id) === String(item.type))?.icon || '🍽️'
-                                    )}
-                                </span>
-                                <span className="item-text">{item.name}</span>
-                                <button className="item-delete" onClick={e => handleDeleteItem(e, item._id)}>×</button>
-                            </div>
-                        ))}
-                        {items.length === 0 && (
-                            <div className="desk-placeholder">
-                                <span className="desk-icon">✨</span>
-                                <span className="desk-label">Натисніть для розміщення</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
+  const handleSurfaceColorChange = async (nextColor) => {
+    setDeskSurfaceColor(nextColor);
+    await persistDeskVisualState({ nextSurfaceColor: nextColor });
+  };
 
-                {/* Templates panel */}
-                <aside className="desk-panel templates-panel">
-                    <div className="panel-label templates-label" onClick={() => setTemplatesOpen(o => !o)}>
-                        <span>Шаблони</span>
-                        <span className="templates-toggle">{templatesOpen ? '▲' : '▼'}</span>
-                    </div>
-                    {templates.length > 0 && templatesOpen && (
-                        <button
-                            className={`btn-all-link ${multiCopyStatus ? 'copied' : ''}`}
-                            onClick={handleCopyAllLink}
-                            title="Створити посилання на проходження всіх сервіровок"
-                        >
-                            {multiCopyStatus ? '✓ Скопійовано!' : '🔗 Посилання на всі столи'}
-                        </button>
-                    )}
-                    {templatesOpen && (
-                        <div className="templates-list-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                            <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
-                                <label className="btn-all-link" style={{ flex: 1, textAlign: 'center', margin: 0, cursor: 'pointer' }}>
-                                    📥 Імпорт шаблону
-                                    <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImportTemplate} />
-                                </label>
-                            </div>
-                            
-                            {user?.role === 'superadmin' && (
-                                <div className="city-filter-container" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '10px' }}>
-                                    <span style={{ fontSize: '0.75rem', color: '#aaa', whiteSpace: 'nowrap' }}>📍 Місто:</span>
-                                    <select
-                                        value={filterCity}
-                                        onChange={e => setFilterCity(e.target.value)}
-                                        style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', cursor: 'pointer', fontSize: '0.85rem', width: '100%' }}
-                                    >
-                                        <option value="" style={{ color: '#000' }}>Всі міста</option>
-                                        {cities.map(c => (
-                                            <option key={c._id} value={c.name} style={{ color: '#000' }}>{c.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
+  return (
+    <div className="virtual-desk-container">
+      <header className="desk-header">
+        <div className="header-info">
+          {editingTemplateId ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '1.5rem' }}>✏️</span>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(event) => setTemplateName(event.target.value)}
+                  placeholder="Назва шаблону..."
+                  style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', fontSize: '1rem', minWidth: '200px' }}
+                />
+                <input
+                  type="number"
+                  value={timeLimit}
+                  onChange={(event) => setTimeLimit(parseInt(event.target.value, 10) || 0)}
+                  placeholder="Час (хв)"
+                  title="Час на проходження (хв, 0 - без обмежень)"
+                  style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '5px 10px', borderRadius: '5px', fontSize: '1rem', width: '80px' }}
+                />
+              </div>
+              <input
+                type="text"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Завдання для студента (необов'язково)..."
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', color: '#ccc', padding: '5px 10px', borderRadius: '5px', fontSize: '0.85rem', width: '100%' }}
+              />
+              <div className="surface-presets">
+                {SURFACE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`surface-preset-chip ${deskSurfacePreset === preset.id ? 'active' : ''}`}
+                    onClick={() => applySurfacePreset(preset.id)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="surface-color-row">
+                <label className="surface-color-label" htmlFor="desk-surface-color-header">Колір столу</label>
+                <input
+                  id="desk-surface-color-header"
+                  className="surface-color-input"
+                  type="color"
+                  value={deskSurfaceColor}
+                  onChange={(event) => handleSurfaceColorChange(event.target.value)}
+                />
+                <span className="surface-color-value">{deskSurfaceColor}</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h1>🍽️ Сервірування</h1>
+              <p>На столі: {items.length} предметів</p>
+            </>
+          )}
+        </div>
 
-                            <div className="templates-list" style={{ overflowY: 'auto', flex: 1, paddingRight: '2px' }}>
-                                {(() => {
-                                    const filteredTemplates = templates.filter(t => !filterCity || t.targetCity === filterCity);
-                                    if (filteredTemplates.length === 0) {
-                                        return <p className="empty-msg">Немає збережених шаблонів</p>;
-                                    }
-                                    return filteredTemplates.map(t => (
-                                        <div
-                                            key={t._id}
-                                            className={`template-card ${editingTemplateId === t._id ? 'active' : ''}`}
-                                            onClick={() => setModalConfig({ show: true, title: 'Завантажити шаблон', type: 'load', data: t })}
-                                        >
-                                            <div className="tpl-main">
-                                                <span className="tpl-icon">📋</span>
-                                                <div className="tpl-info">
-                                                    <span className="tpl-name">{t.templateName || t.name}</span>
-                                                    <span className="tpl-meta">
-                                                        {t.items?.length || 0} предм.
-                                                        {t.timeLimit > 0 && ` · ⏱ ${t.timeLimit} хв`}
-                                                        {t.targetCity && <span style={{ marginLeft: '8px', color: '#38bdf8' }}>📍 {t.targetCity}</span>}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            <div className="tpl-actions">
-                                                {copyStatus === t._id ? (
-                                                    <span className="copied-label">✓</span>
-                                                ) : (
-                                                    <button className="tpl-btn" title="Скопіювати посилання" onClick={e => { e.stopPropagation(); handleCopyLink(t._id); }}>📋</button>
-                                                )}
-                                                <button className="tpl-btn" title="Telegram" onClick={e => { e.stopPropagation(); handleShareTelegram(t._id); }}>✈️</button>
-                                                <button className="tpl-btn" title="Експорт" onClick={e => { e.stopPropagation(); handleExportTemplate(t); }}>💾</button>
-                                                <button className="tpl-btn" title="Редагувати" onClick={e => { e.stopPropagation(); setModalConfig({ show: true, title: 'Редагувати шаблон', type: 'edit', data: t }); }}>✏️</button>
-                                                <button className="tpl-btn tpl-btn-delete" title="Видалити" onClick={e => { e.stopPropagation(); setModalConfig({ show: true, title: 'Видалити шаблон', type: 'delete', data: t._id }); }}>×</button>
-                                            </div>
-                                        </div>
-                                    ));
-                                })()}
-                            </div>
-                        </div>
-                    )}
-                </aside>
+        {user?.role === 'superadmin' && (
+          <div className="header-city-selector" style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '0.5rem 1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <span style={{ fontSize: '0.8rem', color: '#888' }}>📍 Місто:</span>
+            <select
+              value={targetCity}
+              onChange={(event) => setTargetCity(event.target.value)}
+              style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '0.9rem', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="" style={{ color: '#000' }}>Всі міста</option>
+              {cities.map((city) => (
+                <option key={city._id} value={city.name} style={{ color: '#000' }}>{city.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="header-actions">
+          {items.length > 0 && (
+            <button className="btn-header-ghost" onClick={handleClearDesk}>
+              Очистити
+            </button>
+          )}
+          {editingTemplateId && (
+            <button className="btn-header-ghost btn-cancel-edit" onClick={resetEditorState}>
+              Скасувати
+            </button>
+          )}
+          <button className="btn-save-template" onClick={handleSaveTemplateClick}>
+            {editingTemplateId ? 'Оновити' : 'Зберегти'}
+          </button>
+        </div>
+      </header>
+
+      <div className="desk-controls-panel">
+        <div className="desk-control-card desk-surface-card">
+          <div className="desk-toolbar">
+            <div className="desk-toolbar-group desk-toolbar-presets">
+              <div className="desk-control-title">Фон</div>
+              <div className="surface-presets">
+                {SURFACE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`surface-preset-chip ${deskSurfacePreset === preset.id ? 'active' : ''}`}
+                    onClick={() => applySurfacePreset(preset.id)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* ── Modal ── */}
-            <Modal
-                show={modalConfig.show}
-                title={modalConfig.title}
-                onClose={() => setModalConfig(p => ({ ...p, show: false }))}
-                onConfirm={handleConfirmModal}
-            >
-                {modalConfig.type === 'save' ? (
-                    <div className="modal-form">
-                        <div className="form-group">
-                            <label>Назва шаблону</label>
-                            <input
-                                type="text"
-                                value={templateName}
-                                onChange={e => setTemplateName(e.target.value)}
-                                placeholder="Введіть назву..."
-                                autoFocus
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>Завдання (що потрібно зробити)</label>
-                            <textarea
-                                value={description}
-                                onChange={e => setDescription(e.target.value)}
-                                placeholder="Наприклад: Накрийте стіл на 2 персони для вечері..."
-                                rows={3}
-                                style={{ resize: 'vertical' }}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>Час на проходження (хв, 0 — без обмежень)</label>
-                            <input
-                                type="number"
-                                value={timeLimit}
-                                onChange={e => setTimeLimit(parseInt(e.target.value) || 0)}
-                                min="0"
-                            />
-                        </div>
-                        {user?.role === 'superadmin' && (
-                            <div className="form-group">
-                                <label>Призначити місту (залиште порожнім для всіх)</label>
-                                <select
-                                    value={targetCity}
-                                    onChange={e => setTargetCity(e.target.value)}
-                                >
-                                    <option value="">Всі міста</option>
-                                    {cities.map(c => (
-                                        <option key={c._id} value={c.name}>{c.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-                    </div>
-                ) : modalConfig.type === 'load' ? (
-                    <p>Завантажити шаблон "<strong>{modalConfig.data?.name}</strong>"? Поточний стіл буде очищено.</p>
-                ) : modalConfig.type === 'edit' ? (
-                    <p>Редагувати "<strong>{modalConfig.data?.name}</strong>"? Поточний стіл буде замінено предметами шаблону.</p>
-                ) : modalConfig.type === 'clear' ? (
-                    <p>Очистити стіл? Усі {items.length} предмет{items.length < 5 ? 'и' : 'ів'} буде видалено.</p>
-                ) : (
-                    <p>Видалити шаблон "<strong>{templates.find(t => t._id === modalConfig.data)?.name}</strong>"?</p>
-                )}
-            </Modal>
+            <div className="desk-toolbar-group desk-toolbar-color">
+              <div className="desk-control-title">Колір</div>
+              <div className="surface-color-row">
+                <input
+                  id="desk-surface-color-toolbar"
+                  className="surface-color-input"
+                  type="color"
+                  value={deskSurfaceColor}
+                  onChange={(event) => handleSurfaceColorChange(event.target.value)}
+                  disabled={deskSurfacePreset === 'transparent'}
+                />
+                <span className="surface-color-value">{deskSurfaceColor}</span>
+              </div>
+              <div className="surface-swatches">
+                {DEFAULT_SURFACE_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`surface-swatch ${deskSurfaceColor === color ? 'active' : ''}`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => handleSurfaceColorChange(color)}
+                    disabled={deskSurfacePreset === 'transparent'}
+                    title={color}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="desk-toolbar-group desk-toolbar-actions">
+              <div className="desk-control-title">Дії</div>
+              <div className="toolbar-action-row">
+                <button type="button" className="btn-header-ghost underlay-add-btn" onClick={handleAddUnderlayClick}>
+                  Розмальовка
+                </button>
+                <input
+                  ref={underlayInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleUnderlayUpload}
+                />
+                <button className="btn-header-ghost" onClick={moveSelectedItemToFront} disabled={!selectedLayerLabel}>
+                  Вище
+                </button>
+                <button className="btn-header-ghost" onClick={moveSelectedItemToBack} disabled={!selectedLayerLabel}>
+                  Нижче
+                </button>
+              </div>
+              <div className="toolbar-status-line">
+                {selectedLayerLabel ? `Шар: ${selectedLayerLabel}` : 'Обери елемент для зміни шару'}
+              </div>
+            </div>
+          </div>
         </div>
-    );
+      </div>
+
+      <div className="desk-body">
+        <InventoryPanel dishes={dishes} selectedDish={selectedDish} onSelectDish={setSelectedDish} />
+
+        <DeskCanvas
+          items={items}
+          underlays={underlays}
+          dishes={dishes}
+          surfacePreset={deskSurfacePreset}
+          surfaceColor={deskSurfaceColor}
+          selectedItemId={selectedItemId}
+          selectedUnderlayId={selectedUnderlayId}
+          onSelectItem={setSelectedItemId}
+          onSelectUnderlay={setSelectedUnderlayId}
+          draggingItemId={draggingItemId}
+          onDeskClick={handleDeskClick}
+          onDeleteItem={handleDeleteItem}
+          onDeleteUnderlay={handleDeleteUnderlay}
+          onItemPreview={handleItemPreview}
+          onItemCommit={handleItemCommit}
+          onUnderlayPreview={handleUnderlayPreview}
+          onUnderlayCommit={handleUnderlayCommit}
+        />
+
+        <TemplatesPanel
+          templates={templates}
+          templatesOpen={templatesOpen}
+          onToggleOpen={() => setTemplatesOpen((current) => !current)}
+          multiCopyStatus={multiCopyStatus}
+          onCopyAllLink={handleCopyAllLink}
+          user={user}
+          filterCity={filterCity}
+          onFilterCityChange={setFilterCity}
+          cities={cities}
+          editingTemplateId={editingTemplateId}
+          copyStatus={copyStatus}
+          onImportTemplate={handleImportTemplate}
+          onLoadTemplate={openLoadTemplateModal}
+          onCopyLink={handleCopyLink}
+          onShareTelegram={handleShareTelegram}
+          onExportTemplate={handleExportTemplate}
+          onEditTemplate={openEditTemplateModal}
+          onDeleteTemplate={openDeleteTemplateModal}
+        />
+      </div>
+
+      <DeskModal
+        show={modalConfig.show}
+        title={modalConfig.title}
+        onClose={() => setModalConfig((current) => ({ ...current, show: false }))}
+        onConfirm={handleConfirmModal}
+      >
+        {modalConfig.type === 'save' ? (
+          <div className="modal-form">
+            <div className="form-group">
+              <label>Назва шаблону</label>
+              <input
+                type="text"
+                value={templateName}
+                onChange={(event) => setTemplateName(event.target.value)}
+                placeholder="Введіть назву..."
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label>Завдання (що потрібно зробити)</label>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Наприклад: Накрийте стіл на 2 персони для вечері..."
+                rows={3}
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Час на проходження (хв, 0 - без обмежень)</label>
+              <input
+                type="number"
+                value={timeLimit}
+                onChange={(event) => setTimeLimit(parseInt(event.target.value, 10) || 0)}
+                min="0"
+              />
+            </div>
+            <div className="form-group">
+              <label>Фон столу</label>
+              <div className="surface-presets">
+                {SURFACE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`surface-preset-chip ${deskSurfacePreset === preset.id ? 'active' : ''}`}
+                    onClick={() => applySurfacePreset(preset.id)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="surface-color-row" style={{ marginTop: '0.75rem' }}>
+                <label className="surface-color-label" htmlFor="desk-surface-color-modal">Колір столу</label>
+                <input
+                  id="desk-surface-color-modal"
+                  className="surface-color-input"
+                  type="color"
+                  value={deskSurfaceColor}
+                  onChange={(event) => handleSurfaceColorChange(event.target.value)}
+                />
+                <span className="surface-color-value">{deskSurfaceColor}</span>
+              </div>
+            </div>
+            {user?.role === 'superadmin' && (
+              <div className="form-group">
+                <label>Призначити місту (залиште порожнім для всіх)</label>
+                <select value={targetCity} onChange={(event) => setTargetCity(event.target.value)}>
+                  <option value="">Всі міста</option>
+                  {cities.map((city) => (
+                    <option key={city._id} value={city.name}>{city.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        ) : modalConfig.type === 'load' ? (
+          <p>Завантажити шаблон "<strong>{modalConfig.data?.name || modalConfig.data?.templateName}</strong>"? Поточний стіл буде очищено.</p>
+        ) : modalConfig.type === 'edit' ? (
+          <p>Редагувати "<strong>{modalConfig.data?.name || modalConfig.data?.templateName}</strong>"? Поточний стіл буде замінено предметами шаблону.</p>
+        ) : modalConfig.type === 'clear' ? (
+          <p>Очистити стіл? Усі {items.length} предметів буде видалено.</p>
+        ) : (
+          <p>Видалити шаблон "<strong>{modalTemplate?.name || modalTemplate?.templateName}</strong>"?</p>
+        )}
+      </DeskModal>
+    </div>
+  );
 };
 
 export default VirtualDesk;

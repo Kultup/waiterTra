@@ -27,14 +27,18 @@ router.get('/', auth, async (req, res) => {
 // POST new dish (Admin only, platform-scoped)
 router.post('/', [auth, adminAuth], async (req, res) => {
     try {
-        const { name, icon } = req.body;
+        const { name, icon, rotation } = req.body;
         if (!name) {
             return res.status(400).json({ error: 'Dish name is required' });
+        }
+        if (rotation !== undefined && typeof rotation !== 'number') {
+            return res.status(400).json({ error: 'Dish rotation must be a number' });
         }
 
         const newDish = new Dish({
             name,
             icon: icon || '🍽️',
+            rotation: rotation ?? 0,
             platform: req.user.platform || ''
         });
 
@@ -49,13 +53,16 @@ router.post('/', [auth, adminAuth], async (req, res) => {
 // PUT update dish (Admin only, platform-scoped)
 router.put('/:id', [auth, adminAuth], async (req, res) => {
     try {
-        const { name, icon } = req.body;
+        const { name, icon, rotation } = req.body;
+        if (rotation !== undefined && typeof rotation !== 'number') {
+            return res.status(400).json({ error: 'Dish rotation must be a number' });
+        }
         const filter = { _id: req.params.id };
         if (req.user.platform) filter.platform = req.user.platform;
 
         const updatedDish = await Dish.findOneAndUpdate(
             filter,
-            { name, icon },
+            { name, icon, rotation: rotation ?? 0 },
             { new: true, runValidators: true }
         );
 

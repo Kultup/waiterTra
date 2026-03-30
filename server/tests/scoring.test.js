@@ -56,4 +56,14 @@ describe('validateDeskPlacement', () => {
     expect(result.total).toBe(2);
     expect(result.percentage).toBe(0);
   });
+
+  test('should return semantic feedback when item is placed on the wrong side', () => {
+    const userItems = [
+      { type: 'plate', x: 100, y: 100, name: 'Plate' },
+      { type: 'fork', x: 150, y: 100, name: 'Fork' }
+    ];
+    const result = validateDeskPlacement(userItems, targetItems);
+    expect(result.semanticFeedback).toBeDefined();
+    expect(result.semanticFeedback.issues.length).toBeGreaterThan(0);
+  });
 });

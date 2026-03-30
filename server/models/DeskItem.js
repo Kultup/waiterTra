@@ -9,6 +9,7 @@ const deskItemSchema = new mongoose.Schema({
   width: { type: Number, default: 40 },
   height: { type: Number, default: 40 },
   rotation: { type: Number, default: 0 },
+  zIndex: { type: Number, default: 0 },
   image: { type: String },
   category: { type: String },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
