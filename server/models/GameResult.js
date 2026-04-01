@@ -1,5 +1,10 @@
 const mongoose = require('mongoose');
 
+const choicePathEntrySchema = new mongoose.Schema({
+    nodeText: { type: String, default: '' },
+    choiceText: { type: String, default: '' }
+}, { _id: false });
+
 const gameResultSchema = new mongoose.Schema({
     scenarioId: { type: mongoose.Schema.Types.ObjectId, ref: 'GameScenario', required: true },
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -11,7 +16,7 @@ const gameResultSchema = new mongoose.Schema({
     position: { type: String, default: '' },
     endingTitle: { type: String, default: '' },
     isWin: { type: Boolean },
-    choicePath: [{ type: String }],
+    choicePath: [choicePathEntrySchema],
     // legacy fields kept for backward compatibility
     result: { type: String },
     choicesMade: [{

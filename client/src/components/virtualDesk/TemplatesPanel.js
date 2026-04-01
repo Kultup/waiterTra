@@ -28,8 +28,10 @@ const TemplatesPanel = ({
         <span>Шаблони</span>
         <span className="templates-toggle">{templatesOpen ? '▲' : '▼'}</span>
       </div>
+
       {templates.length > 0 && templatesOpen && (
         <button
+          type="button"
           className={`btn-all-link ${multiCopyStatus ? 'copied' : ''}`}
           onClick={onCopyAllLink}
           title="Створити посилання на проходження всіх сервіровок"
@@ -37,6 +39,7 @@ const TemplatesPanel = ({
           {multiCopyStatus ? '✓ Скопійовано!' : 'Посилання на всі столи'}
         </button>
       )}
+
       {templatesOpen && (
         <div className="templates-list-container" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
@@ -70,9 +73,12 @@ const TemplatesPanel = ({
                 <div
                   key={template._id}
                   className={`template-card ${editingTemplateId === template._id ? 'active' : ''}`}
-                  onClick={() => onLoadTemplate(template)}
                 >
-                  <div className="tpl-main">
+                  <button
+                    type="button"
+                    className="tpl-main tpl-main-button"
+                    onClick={() => onLoadTemplate(template)}
+                  >
                     <span className="tpl-icon">📋</span>
                     <div className="tpl-info">
                       <span className="tpl-name">{template.templateName || template.name}</span>
@@ -82,17 +88,18 @@ const TemplatesPanel = ({
                         {template.targetCity && <span style={{ marginLeft: '8px', color: '#38bdf8' }}>📍 {template.targetCity}</span>}
                       </span>
                     </div>
-                  </div>
-                  <div className="tpl-actions">
+                  </button>
+
+                  <div className="tpl-actions" onClick={(event) => event.stopPropagation()}>
                     {copyStatus === template._id ? (
                       <span className="copied-label">✓</span>
                     ) : (
-                      <button className="tpl-btn" title="Скопіювати посилання" onClick={(event) => { event.stopPropagation(); onCopyLink(template._id); }}>📋</button>
+                      <button type="button" className="tpl-btn" title="Скопіювати посилання" onClick={() => onCopyLink(template._id)}>📋</button>
                     )}
-                    <button className="tpl-btn" title="Telegram" onClick={(event) => { event.stopPropagation(); onShareTelegram(template._id); }}>TG</button>
-                    <button className="tpl-btn" title="Експорт" onClick={(event) => { event.stopPropagation(); onExportTemplate(template); }}>💾</button>
-                    <button className="tpl-btn" title="Редагувати" onClick={(event) => { event.stopPropagation(); onEditTemplate(template); }}>✎</button>
-                    <button className="tpl-btn tpl-btn-delete" title="Видалити" onClick={(event) => { event.stopPropagation(); onDeleteTemplate(template._id); }}>x</button>
+                    <button type="button" className="tpl-btn" title="Telegram" onClick={() => onShareTelegram(template._id)}>TG</button>
+                    <button type="button" className="tpl-btn" title="Експорт" onClick={() => onExportTemplate(template)}>💾</button>
+                    <button type="button" className="tpl-btn" title="Редагувати" onClick={() => onEditTemplate(template)}>✎</button>
+                    <button type="button" className="tpl-btn tpl-btn-delete" title="Видалити" onClick={() => onDeleteTemplate(template._id)}>x</button>
                   </div>
                 </div>
               ))

@@ -5,117 +5,108 @@ const GameResult = require('../models/GameResult');
 const QuizResult = require('../models/QuizResult');
 const ComplexTestResult = require('../models/ComplexTestResult');
 const Student = require('../models/Student');
-const { auth, adminAuth } = require('../middleware/authMiddleware');
+const { auth, checkRole } = require('../middleware/authMiddleware');
 const logger = require('../utils/logger');
+const { buildResultFilter } = require('../utils/platformFilter');
+const { buildStudentSummaries, normalizeStudentIdentity, buildIdentityQuery, getGameIdentityQuery, fetchAccessibleStudentHistory } = require('../utils/studentAccess');
 
-// GET /api/maintenance/students - Get unique students list
-router.get('/students', auth, async (req, res) => {
+const MAINTENANCE_ROLES = ['superadmin', 'admin'];
+
+const isGlobalSuperadmin = (user) => user.role === 'superadmin' && !user.platform;
+
+async function deleteScopedResults(user, city) {
+    const normalizedCity = String(city || '').trim();
+    const testQuery = { ...(await buildResultFilter(user, 'studentCity')), studentCity: normalizedCity };
+    const gameQuery = { ...(await buildResultFilter(user, 'city')), city: normalizedCity };
+    const quizQuery = { ...(await buildResultFilter(user, 'studentCity')), studentCity: normalizedCity };
+    const complexQuery = { ...(await buildResultFilter(user, 'studentCity')), studentCity: normalizedCity };
+
+    return Promise.all([
+        TestResult.deleteMany(testQuery),
+        GameResult.deleteMany(gameQuery),
+        QuizResult.deleteMany(quizQuery),
+        ComplexTestResult.deleteMany(complexQuery)
+    ]);
+}
+
+async function deleteScopedStudentResults(user, identity) {
+    const normalizedIdentity = normalizeStudentIdentity(identity);
+    const testQuery = { ...(await buildResultFilter(user, 'studentCity')), ...buildIdentityQuery(normalizedIdentity, 'studentCity') };
+    const gameQuery = { ...(await buildResultFilter(user, 'city')), ...getGameIdentityQuery(normalizedIdentity) };
+    const quizQuery = { ...(await buildResultFilter(user, 'studentCity')), ...buildIdentityQuery(normalizedIdentity, 'studentCity') };
+    const complexQuery = { ...(await buildResultFilter(user, 'studentCity')), ...buildIdentityQuery(normalizedIdentity, 'studentCity') };
+
+    return Promise.all([
+        TestResult.deleteMany(testQuery),
+        GameResult.deleteMany(gameQuery),
+        QuizResult.deleteMany(quizQuery),
+        ComplexTestResult.deleteMany(complexQuery)
+    ]);
+}
+
+// GET /api/maintenance/students - Get accessible students list
+router.get('/students', auth, checkRole(MAINTENANCE_ROLES), async (req, res) => {
     try {
-        if (!['superadmin', 'admin'].includes(req.user.role)) {
-            return res.status(403).json({ error: 'Немає доступу' });
-        }
-
-        let query = {};
-        if (req.user.role === 'admin' && req.user.city) {
-            query = { studentCity: req.user.city };
-        }
-
-        const students = await Student.find(query).sort({ studentLastName: 1 });
-        res.json(students);
+        const history = await fetchAccessibleStudentHistory(req.user);
+        res.json(buildStudentSummaries(history));
     } catch (err) {
         logger.error('Maintenance get students error:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
-// DELETE /api/maintenance/reset/city - Reset all results for a city
-router.delete('/reset/city', auth, async (req, res) => {
-    const { city } = req.body;
-    if (!city) return res.status(400).json({ error: 'Місто є обов\'язковим' });
+// DELETE /api/maintenance/reset/city - Reset all accessible results for a city
+router.delete('/reset/city', auth, checkRole(MAINTENANCE_ROLES), async (req, res) => {
+    const city = String(req.body?.city || '').trim();
+    if (!city) {
+        return res.status(400).json({ error: 'Місто є обов\'язковим' });
+    }
 
     try {
-        if (!['superadmin', 'admin'].includes(req.user.role)) {
-            return res.status(403).json({ error: 'Немає доступу' });
+        const results = await deleteScopedResults(req.user, city);
+        let deletedCount = results.reduce((sum, result) => sum + result.deletedCount, 0);
+
+        if (isGlobalSuperadmin(req.user)) {
+            const studentResult = await Student.deleteMany({ studentCity: city });
+            deletedCount += studentResult.deletedCount;
         }
 
-        // Admins can only reset their own city
-        if (req.user.role === 'admin' && req.user.city && req.user.city !== city) {
-            return res.status(403).json({ error: 'Ви можете скидати результати тільки свого міста' });
-        }
-
-        const results = await Promise.all([
-            TestResult.deleteMany({ studentCity: city }),
-            GameResult.deleteMany({ city: city }),
-            QuizResult.deleteMany({ studentCity: city }),
-            ComplexTestResult.deleteMany({ studentCity: city }),
-            Student.deleteMany({ studentCity: city })
-        ]);
-
-        const count = results.reduce((sum, r) => sum + r.deletedCount, 0);
-        logger.info(`Bulk reset for city ${city} by ${req.user.username}. Deleted ${count} records.`);
-        
-        res.json({ success: true, deletedCount: count });
+        logger.info(`Bulk reset for city ${city} by ${req.user.username}. Deleted ${deletedCount} records.`);
+        res.json({ success: true, deletedCount });
     } catch (err) {
         logger.error('Maintenance reset city error:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
-// DELETE /api/maintenance/reset/student - Reset all results for a student
-router.delete('/reset/student', auth, async (req, res) => {
-    const { studentName, studentLastName, studentCity } = req.body;
-    if (!studentName || !studentLastName) {
+// DELETE /api/maintenance/reset/student - Reset all accessible results for a student
+router.delete('/reset/student', auth, checkRole(MAINTENANCE_ROLES), async (req, res) => {
+    const identity = normalizeStudentIdentity(req.body);
+    if (!identity.studentName || !identity.studentLastName) {
         return res.status(400).json({ error: 'Ім\'я та прізвище обов\'язкові' });
     }
 
     try {
-        if (!['superadmin', 'admin'].includes(req.user.role)) {
-            return res.status(403).json({ error: 'Немає доступу' });
+        const results = await deleteScopedStudentResults(req.user, identity);
+        let deletedCount = results.reduce((sum, result) => sum + result.deletedCount, 0);
+
+        if (isGlobalSuperadmin(req.user)) {
+            const studentResult = await Student.deleteOne(buildIdentityQuery(identity, 'studentCity'));
+            deletedCount += studentResult.deletedCount;
         }
 
-        // Admins can only reset students from their own city
-        if (req.user.role === 'admin' && req.user.city && req.user.city !== studentCity) {
-            return res.status(403).json({ error: 'Ви можете скидати результати тільки студентів свого міста' });
-        }
-
-        const queryGeneral = {
-            studentName: studentName.trim(),
-            studentLastName: studentLastName.trim(),
-            studentCity: studentCity ? studentCity.trim() : ''
-        };
-
-        const queryGame = {
-            studentName: studentName.trim(),
-            studentLastName: studentLastName.trim(),
-            city: studentCity ? studentCity.trim() : ''
-        };
-
-        const results = await Promise.all([
-            TestResult.deleteMany(queryGeneral),
-            GameResult.deleteMany(queryGame),
-            QuizResult.deleteMany(queryGeneral),
-            ComplexTestResult.deleteMany(queryGeneral),
-            Student.deleteOne({
-                studentName: studentName.trim(),
-                studentLastName: studentLastName.trim(),
-                studentCity: studentCity ? studentCity.trim() : ''
-            })
-        ]);
-
-        const count = results.reduce((sum, r) => sum + r.deletedCount, 0);
-        logger.info(`Bulk reset for student ${studentLastName} ${studentName} by ${req.user.username}. Deleted ${count} records.`);
-
-        res.json({ success: true, deletedCount: count });
+        logger.info(`Bulk reset for student ${identity.studentLastName} ${identity.studentName} by ${req.user.username}. Deleted ${deletedCount} records.`);
+        res.json({ success: true, deletedCount });
     } catch (err) {
         logger.error('Maintenance reset student error:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
-// DELETE /api/maintenance/reset/all - Reset ALL results in the system (Superadmin only)
+// DELETE /api/maintenance/reset/all - Reset ALL results in the system (global superadmin only)
 router.delete('/reset/all', auth, async (req, res) => {
     try {
-        if (req.user.role !== 'superadmin') {
+        if (!isGlobalSuperadmin(req.user)) {
             return res.status(403).json({ error: 'Тільки головний адміністратор може виконувати повне скидання' });
         }
 
@@ -127,10 +118,10 @@ router.delete('/reset/all', auth, async (req, res) => {
             Student.deleteMany({})
         ]);
 
-        const count = results.reduce((sum, r) => sum + r.deletedCount, 0);
-        logger.warn(`GLOBAL RESET by ${req.user.username}. Deleted ${count} records across all models.`);
+        const deletedCount = results.reduce((sum, result) => sum + result.deletedCount, 0);
+        logger.warn(`GLOBAL RESET by ${req.user.username}. Deleted ${deletedCount} records across all models.`);
 
-        res.json({ success: true, deletedCount: count });
+        res.json({ success: true, deletedCount });
     } catch (err) {
         logger.error('Maintenance global reset error:', err);
         res.status(500).json({ error: err.message });

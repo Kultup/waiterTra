@@ -19,7 +19,6 @@ const MultiDeskTest = () => {
     const [dishes, setDishes] = useState([]);
     const [stepResults, setStepResults] = useState([]);
     const [currentStepResult, setCurrentStepResult] = useState(null);
-    const [catalogDishes, setCatalogDishes] = useState([]);
 
     const [showSummary, setShowSummary] = useState(false);
     const [serverResults, setServerResults] = useState(null);
@@ -27,15 +26,11 @@ const MultiDeskTest = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [testRes, dishesRes] = await Promise.all([
-                    axios.get(`${API_URL}/tests/multi/${hash}`),
-                    axios.get(`${API_URL}/dishes`)
-                ]);
+                const testRes = await axios.get(`${API_URL}/tests/multi/${hash}`);
                 setTestData(testRes.data);
                 if (testRes.data.city) {
                     setStudentInfo(prev => ({ ...prev, city: testRes.data.city }));
                 }
-                setCatalogDishes(dishesRes.data.map(d => ({ ...d, id: d._id })));
             } catch (err) {
                 console.error('Error fetching multi-test data:', err);
                 if (err.response?.status === 410) navigate('/inactive');
@@ -53,17 +48,12 @@ const MultiDeskTest = () => {
         if (!currentTemplate) return;
 
         const allowedItems = currentTemplate.allowedItems || [];
-        if (allowedItems.length > 0) {
-            setDishes(allowedItems.map((item) => ({
-                ...item,
-                _id: item.id || item.type,
-                id: item.id || item.type,
-            })));
-            return;
-        }
-
-        setDishes(catalogDishes);
-    }, [currentTemplate, catalogDishes]);
+        setDishes(allowedItems.map((item) => ({
+            ...item,
+            _id: item.id || item.type,
+            id: item.id || item.type,
+        })));
+    }, [currentTemplate]);
 
     useEffect(() => {
         setCurrentStepResult(null);

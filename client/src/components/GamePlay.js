@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import API_URL from '../api';
 import './GamePlay.css';
 
 const GamePlay = () => {
     const { hash } = useParams();
-    const navigate = useNavigate();
     const [scenario, setScenario] = useState(null);
     const [currentNodeId, setCurrentNodeId] = useState(null);
     const [endResult, setEndResult] = useState(null);
@@ -75,6 +74,7 @@ const GamePlay = () => {
             try {
                 await axios.post(`${API_URL}/game-results`, {
                     hash,
+                    scenarioId: scenario._id,
                     scenarioTitle: scenario.title,
                     playerName: playerInfo.firstName,
                     playerLastName: playerInfo.lastName,

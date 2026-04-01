@@ -1,10 +1,12 @@
 const express = require('express');
 const DeskItem = require('../models/DeskItem');
 const Dish = require('../models/Dish');
-const { auth } = require('../middleware/authMiddleware');
+const { auth, checkRole } = require('../middleware/authMiddleware');
+const { DESK_EDITOR_ROLES } = require('../utils/accessPolicy');
 const router = express.Router();
+const deskEditorAuth = [auth, checkRole(DESK_EDITOR_ROLES)];
 
-router.get('/', auth, async (req, res) => {
+router.get('/', deskEditorAuth, async (req, res) => {
   try {
     const query = { ownerId: req.user._id };
     const items = await DeskItem.find(query);
@@ -20,7 +22,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-router.post('/', auth, async (req, res) => {
+router.post('/', deskEditorAuth, async (req, res) => {
   const { name, x, y } = req.body;
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'Поле name є обов\'язковим' });
@@ -37,7 +39,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-router.patch('/:id', auth, async (req, res) => {
+router.patch('/:id', deskEditorAuth, async (req, res) => {
   const allowedFields = ['x', 'y', 'width', 'height', 'rotation', 'zIndex'];
   const updates = {};
 
@@ -71,7 +73,7 @@ router.patch('/:id', auth, async (req, res) => {
   }
 });
 
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', deskEditorAuth, async (req, res) => {
   try {
     const query = { _id: req.params.id, ownerId: req.user._id };
     const item = await DeskItem.findOneAndDelete(query);
@@ -83,7 +85,7 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // Bulk DELETE all items for the current user
-router.delete('/', auth, async (req, res) => {
+router.delete('/', deskEditorAuth, async (req, res) => {
   try {
     await DeskItem.deleteMany({ ownerId: req.user._id });
     res.json({ message: 'All items deleted' });

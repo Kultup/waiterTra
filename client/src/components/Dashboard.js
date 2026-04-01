@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import * as XLSX from 'xlsx';
 import {
     PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, Label,
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -7,6 +8,27 @@ import {
 } from 'recharts';
 import API_URL from '../api';
 import './Dashboard.css';
+
+const getResultFirstName = (result) => result?.studentName || result?.playerName || '';
+const getResultLastName = (result) => result?.studentLastName || result?.playerLastName || '';
+const getResultCity = (result) => result?.studentCity || result?.playerCity || result?.city || '';
+const getResultPosition = (result) => result?.studentPosition || result?.playerPosition || result?.position || '';
+const getResultFullName = (result) => `${getResultLastName(result)} ${getResultFirstName(result)}`.trim();
+const getTypeLabel = (type) => ({
+    test: 'Сервірування',
+    game: 'Гра',
+    quiz: 'Квіз',
+    complex: 'Комплексний'
+}[type] || type || '—');
+
+const autoWidth = (worksheet, rows) => {
+    if (!rows.length) return;
+    const keys = Object.keys(rows[0]);
+    worksheet['!cols'] = keys.map((key) => {
+        const maxLength = Math.max(key.length, ...rows.map((row) => String(row[key] ?? '').length));
+        return { wch: Math.min(maxLength + 2, 40) };
+    });
+};
 
 const Dashboard = ({ user }) => {
     const [stats, setStats] = useState([
@@ -20,6 +42,7 @@ const Dashboard = ({ user }) => {
     const [categoryData, setCategoryData] = useState([]);
     const [trendData, setTrendData] = useState([]);
     const [weakSpots, setWeakSpots] = useState([]);
+    const [statsPayload, setStatsPayload] = useState(null);
     const [loading, setLoading] = useState(true);
     const [selectedCity, setSelectedCity] = useState('');
     const [cities, setCities] = useState([]);
@@ -31,14 +54,7 @@ const Dashboard = ({ user }) => {
 
     const isAdminCityOnly = user?.role !== 'superadmin' && user?.city;
 
-    useEffect(() => {
-        if (!isAdminCityOnly && user?.role === 'superadmin') {
-            fetchCities();
-        }
-        fetchStats();
-    }, [selectedCity, period]);
-
-    const fetchCities = async () => {
+    const fetchCities = useCallback(async () => {
         try {
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/stats/cities`, {
@@ -48,9 +64,9 @@ const Dashboard = ({ user }) => {
         } catch (err) {
             console.error('Failed to fetch cities:', err);
         }
-    };
+    }, []);
 
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
@@ -62,6 +78,7 @@ const Dashboard = ({ user }) => {
             
             const statsRes = await axios.get(`${API_URL}/stats/overview?${queryParams}`, config);
             const data = statsRes.data;
+            setStatsPayload(data);
 
             setStats([
                 { label: 'Всього результатів', value: String(data.totalResults), icon: '📊', color: '#00d2ff' },
@@ -90,7 +107,14 @@ const Dashboard = ({ user }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [period, selectedCity]);
+
+    useEffect(() => {
+        if (!isAdminCityOnly && user?.role === 'superadmin') {
+            fetchCities();
+        }
+        fetchStats();
+    }, [fetchCities, fetchStats, isAdminCityOnly, user?.role]);
 
     const handleAiAnalyze = async () => {
         setAiLoading(true);
@@ -110,6 +134,123 @@ const Dashboard = ({ user }) => {
         } finally {
             setAiLoading(false);
         }
+    };
+
+    const handleExportStats = () => {
+        if (!statsPayload) return;
+
+        const workbook = XLSX.utils.book_new();
+        const generatedAt = new Date();
+        const cityLabel = selectedCity || user?.city || 'Всі доступні';
+        const summaryRows = [
+            { Показник: 'Звіт сформовано', Значення: generatedAt.toLocaleString('uk-UA') },
+            { Показник: 'Місто', Значення: cityLabel },
+            { Показник: 'Період', Значення: `${period} днів` },
+            { Показник: 'Всього результатів', Значення: statsPayload.totalResults },
+            { Показник: 'Успішно', Значення: statsPayload.passedResults },
+            { Показник: 'Провалено', Значення: statsPayload.failedResults },
+            { Показник: 'Успішність %', Значення: statsPayload.overallPercentage }
+        ];
+        const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+        autoWidth(summarySheet, summaryRows);
+        XLSX.utils.book_append_sheet(workbook, summarySheet, 'Зведення');
+
+        const typeRows = [
+            {
+                Категорія: 'Сервірування',
+                Кількість: statsPayload.byType?.test || 0,
+                'Середній результат %': statsPayload.avgByType?.test || 0
+            },
+            {
+                Категорія: 'Гра',
+                Кількість: statsPayload.byType?.game || 0,
+                'Середній результат %': statsPayload.avgByType?.game || 0
+            },
+            {
+                Категорія: 'Квіз',
+                Кількість: statsPayload.byType?.quiz || 0,
+                'Середній результат %': statsPayload.avgByType?.quiz || 0
+            },
+            {
+                Категорія: 'Комплексний',
+                Кількість: statsPayload.byType?.complex || 0,
+                'Середній результат %': statsPayload.avgByType?.complex || 0
+            }
+        ];
+        const typeSheet = XLSX.utils.json_to_sheet(typeRows);
+        autoWidth(typeSheet, typeRows);
+        XLSX.utils.book_append_sheet(workbook, typeSheet, 'Категорії');
+
+        if (Array.isArray(statsPayload.byCity) && statsPayload.byCity.length > 0) {
+            const cityRows = statsPayload.byCity.map((entry) => ({
+                Місто: entry.name,
+                Всього: entry.count,
+                Успішно: entry.passed,
+                Провалено: entry.failed,
+                'Успішність %': entry.successRate,
+                'Середній результат %': entry.avgPercentage
+            }));
+            const citySheet = XLSX.utils.json_to_sheet(cityRows);
+            autoWidth(citySheet, cityRows);
+            XLSX.utils.book_append_sheet(workbook, citySheet, 'Міста');
+        }
+
+        if (Array.isArray(statsPayload.byPosition) && statsPayload.byPosition.length > 0) {
+            const positionRows = statsPayload.byPosition.map((entry) => ({
+                Посада: entry.name,
+                Всього: entry.count,
+                Успішно: entry.passed,
+                Провалено: entry.failed,
+                'Успішність %': entry.successRate,
+                'Середній результат %': entry.avgPercentage
+            }));
+            const positionSheet = XLSX.utils.json_to_sheet(positionRows);
+            autoWidth(positionSheet, positionRows);
+            XLSX.utils.book_append_sheet(workbook, positionSheet, 'Посади');
+        }
+
+        if (trendData.length > 0) {
+            const trendRows = trendData.map((entry) => ({
+                Дата: entry.date,
+                Успішно: entry.passed,
+                Провалено: entry.failed,
+                Всього: entry.total
+            }));
+            const trendSheet = XLSX.utils.json_to_sheet(trendRows);
+            autoWidth(trendSheet, trendRows);
+            XLSX.utils.book_append_sheet(workbook, trendSheet, 'Динаміка');
+        }
+
+        if (weakSpots.length > 0) {
+            const weakRows = weakSpots.map((entry) => ({
+                "Ім'я": entry.student,
+                Тип: getTypeLabel(entry.type),
+                'Результат %': entry.percentage,
+                Дата: entry.date
+            }));
+            const weakSheet = XLSX.utils.json_to_sheet(weakRows);
+            autoWidth(weakSheet, weakRows);
+            XLSX.utils.book_append_sheet(workbook, weakSheet, 'Слабкі місця');
+        }
+
+        if (recentResults.length > 0) {
+            const recentRows = recentResults.map((entry) => ({
+                "Ім'я": getResultFullName(entry) || '—',
+                Місто: getResultCity(entry) || '—',
+                Посада: getResultPosition(entry) || '—',
+                Тип: getTypeLabel(entry.type),
+                Статус: entry.passed ? 'Успішно' : 'Провалено',
+                'Результат %': entry.percentage ?? (entry.passed ? 100 : 0),
+                Дата: new Date(entry.completedAt).toLocaleString('uk-UA')
+            }));
+            const recentSheet = XLSX.utils.json_to_sheet(recentRows);
+            autoWidth(recentSheet, recentRows);
+            XLSX.utils.book_append_sheet(workbook, recentSheet, 'Останні результати');
+        }
+
+        const safeCity = cityLabel.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '') || 'all';
+        const fileName = `dashboard_stats_${safeCity}_${period}d_${generatedAt.toISOString().slice(0, 10)}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
     };
 
     if (loading) return <div className="dashboard-loading">Завантаження статистики...</div>;
@@ -145,6 +286,9 @@ const Dashboard = ({ user }) => {
                     </select>
                     <button className="ai-analyze-btn" onClick={handleAiAnalyze} disabled={aiLoading}>
                         {aiLoading ? '⏳ Аналіз...' : '🤖 AI Аналіз'}
+                    </button>
+                    <button className="dashboard-action-btn dashboard-export-btn" onClick={handleExportStats}>
+                        📊 Excel
                     </button>
                 </div>
             </header>
@@ -291,9 +435,9 @@ const Dashboard = ({ user }) => {
                                 <tbody>
                                     {recentResults.map((r, i) => (
                                         <tr key={i}>
-                                            <td>{r.studentLastName || r.playerLastName} {r.studentName || r.playerName}</td>
-                                            <td>{r.studentCity || r.playerCity}</td>
-                                            <td>{r.studentPosition || r.playerPosition || '—'}</td>
+                                            <td>{getResultLastName(r)} {getResultFirstName(r)}</td>
+                                            <td>{getResultCity(r) || '—'}</td>
+                                            <td>{getResultPosition(r) || '—'}</td>
                                             <td><span className="type-badge">{r.type}</span></td>
                                             <td>
                                                 <span className={`status-dot ${r.passed ? 'passed' : 'failed'}`}></span>

@@ -322,6 +322,26 @@
     opacity: 0.6;
     cursor: wait;
 }
+.dashboard-action-btn {
+    color: #fff;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+.dashboard-action-btn:hover {
+    transform: translateY(-1px);
+}
+.dashboard-export-btn {
+    background: linear-gradient(135deg, #10b981, #0ea5a4);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.28);
+}
+.dashboard-export-btn:hover {
+    box-shadow: 0 8px 22px rgba(16, 185, 129, 0.35);
+}
 .ai-overlay {
     position: fixed;
     inset: 0;

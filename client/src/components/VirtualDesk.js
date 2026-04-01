@@ -7,6 +7,7 @@ import InventoryPanel from './virtualDesk/InventoryPanel';
 import DeskCanvas from './virtualDesk/DeskCanvas';
 import TemplatesPanel from './virtualDesk/TemplatesPanel';
 import { SURFACE_PRESETS } from './virtualDesk/surfacePresets';
+import { copyText } from '../utils/clipboard';
 
 const buildTemplateItems = (items, dishes) => (
   items.map(({ name, icon, x, y, type, id, width, height, rotation, zIndex }) => {
@@ -534,7 +535,7 @@ const VirtualDesk = () => {
   const handleCopyLink = async (templateId) => {
     try {
       const url = await generateTestUrl(templateId);
-      await navigator.clipboard.writeText(url);
+      await copyText(url);
       setCopyStatus(templateId);
       setTimeout(() => setCopyStatus(null), 3000);
     } catch (error) {
@@ -567,7 +568,7 @@ const VirtualDesk = () => {
         getAuthConfig()
       );
       const url = `${window.location.origin}/multi-test/${response.data.hash}`;
-      await navigator.clipboard.writeText(url);
+      await copyText(url);
       setMultiCopyStatus(true);
       setTimeout(() => setMultiCopyStatus(false), 3000);
     } catch (error) {

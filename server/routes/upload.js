@@ -4,7 +4,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
-const { auth } = require('../middleware/authMiddleware');
+const { auth, checkRole } = require('../middleware/authMiddleware');
+const { MEDIA_EDITOR_ROLES } = require('../utils/accessPolicy');
 const logger = require('../utils/logger');
 
 // Uploads directory (created in index.js)
@@ -38,7 +39,7 @@ const upload = multer({
 });
 
 // Upload endpoint
-router.post('/', auth, upload.single('file'), async (req, res) => {
+router.post('/', auth, checkRole(MEDIA_EDITOR_ROLES), upload.single('file'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
     }

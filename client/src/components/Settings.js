@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import API_URL, { getUserPlatform } from '../api';
 import ConfirmModal from './ConfirmModal';
@@ -21,12 +21,11 @@ const Settings = ({ user }) => {
         type: '' // 'city' or 'student'
     });
 
-    const token = localStorage.getItem('token');
-    const config = { headers: { Authorization: `Bearer ${token}` } };
-
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
         try {
+            const token = localStorage.getItem('token');
+            const config = { headers: { Authorization: `Bearer ${token}` } };
             const [citiesRes, studentsRes] = await Promise.all([
                 axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`, config),
                 axios.get(`${API_URL}/maintenance/students`, config)
@@ -38,16 +37,18 @@ const Settings = ({ user }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [fetchData]);
 
     const handleResetCity = async () => {
         if (!selectedCity) return;
         setActionLoading(true);
         try {
+            const token = localStorage.getItem('token');
+            const config = { headers: { Authorization: `Bearer ${token}` } };
             const res = await axios.delete(`${API_URL}/maintenance/reset/city`, {
                 ...config,
                 data: { city: selectedCity }
@@ -66,6 +67,8 @@ const Settings = ({ user }) => {
     const handleResetStudent = async (student) => {
         setActionLoading(true);
         try {
+            const token = localStorage.getItem('token');
+            const config = { headers: { Authorization: `Bearer ${token}` } };
             const res = await axios.delete(`${API_URL}/maintenance/reset/student`, {
                 ...config,
                 data: {
@@ -87,6 +90,8 @@ const Settings = ({ user }) => {
     const handleResetAll = async () => {
         setActionLoading(true);
         try {
+            const token = localStorage.getItem('token');
+            const config = { headers: { Authorization: `Bearer ${token}` } };
             const res = await axios.delete(`${API_URL}/maintenance/reset/all`, config);
             alert(`Успішно видалено абсолютно ВСІ результати (${res.data.deletedCount} записів). Система очищена.`);
             fetchData();

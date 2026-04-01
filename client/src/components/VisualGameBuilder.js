@@ -3,6 +3,7 @@ import axios from 'axios';
 import { utils, read } from 'xlsx';
 import API_URL, { getUserPlatform } from '../api';
 import ConfirmModal from './ConfirmModal';
+import { copyText } from '../utils/clipboard';
 import './VisualGameBuilder.css';
 
 const genNodeId = () => `n_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
@@ -11,6 +12,213 @@ const genCharId = () => `ch_${Date.now()}_${Math.random().toString(36).substr(2,
 
 const AVATAR_PRESETS = ['🧑‍🍳', '👨‍🍳', '👩‍🍳', '🤵', '👰', '👨‍💼', '👩‍💼', '🧑‍💼', '👮', '🧑‍🎓', '👨‍🎓', '👩‍🎓', '🧙', '🦸', '🦹', '🤖', '😊', '👤'];
 const COLOR_PRESETS = ['#ff6d5a', '#38bdf8', '#4caf50', '#ff9800', '#a855f7', '#ec4899', '#14b8a6', '#f59e0b'];
+
+const getValidStartNodeId = (nodes = [], preferredStartNodeId = '') => {
+    if (nodes.some((node) => node.nodeId === preferredStartNodeId)) {
+        return preferredStartNodeId;
+    }
+
+    return nodes[0]?.nodeId || null;
+};
+
+const AUTO_LAYOUT_START_X = 120;
+const AUTO_LAYOUT_START_Y = 120;
+const AUTO_LAYOUT_COLUMN_GAP = 360;
+const AUTO_LAYOUT_ROW_GAP = 230;
+const NODE_CARD_WIDTH = 260;
+const NODE_CARD_BASE_HEIGHT = 118;
+const NODE_CHOICE_ROW_HEIGHT = 30;
+
+const needsAutoLayout = (nodes = []) => {
+    if (nodes.length < 2) {
+        return false;
+    }
+
+    const occupiedPositions = new Set();
+    let duplicatePositions = 0;
+
+    nodes.forEach((node) => {
+        const x = Number(node?.x);
+        const y = Number(node?.y);
+        const key = `${Math.round(Number.isFinite(x) ? x : 0)}:${Math.round(Number.isFinite(y) ? y : 0)}`;
+
+        if (occupiedPositions.has(key)) {
+            duplicatePositions += 1;
+        } else {
+            occupiedPositions.add(key);
+        }
+    });
+
+    return duplicatePositions > 0;
+};
+
+const autoLayoutNodes = (nodes = [], preferredStartNodeId = '') => {
+    if (!nodes.length) {
+        return [];
+    }
+
+    const startNodeId = getValidStartNodeId(nodes, preferredStartNodeId);
+    const nodeMap = new Map(nodes.map((node) => [node.nodeId, node]));
+    const levelById = new Map();
+    const queue = [];
+    const visited = new Set();
+
+    if (startNodeId && nodeMap.has(startNodeId)) {
+        levelById.set(startNodeId, 0);
+        queue.push(startNodeId);
+        visited.add(startNodeId);
+    }
+
+    while (queue.length > 0) {
+        const currentId = queue.shift();
+        const currentLevel = levelById.get(currentId) || 0;
+        const currentNode = nodeMap.get(currentId);
+
+        (currentNode?.choices || []).forEach((choice) => {
+            const nextNodeId = choice?.nextNodeId;
+            if (!nextNodeId || !nodeMap.has(nextNodeId) || visited.has(nextNodeId)) {
+                return;
+            }
+
+            visited.add(nextNodeId);
+            levelById.set(nextNodeId, currentLevel + 1);
+            queue.push(nextNodeId);
+        });
+    }
+
+    let fallbackLevel = Math.max(-1, ...Array.from(levelById.values()));
+    nodes.forEach((node) => {
+        if (!levelById.has(node.nodeId)) {
+            fallbackLevel += 1;
+            levelById.set(node.nodeId, fallbackLevel);
+        }
+    });
+
+    const nodesByLevel = new Map();
+    nodes.forEach((node, index) => {
+        const level = levelById.get(node.nodeId) || 0;
+        const levelNodes = nodesByLevel.get(level) || [];
+        levelNodes.push({ node, index });
+        nodesByLevel.set(level, levelNodes);
+    });
+
+    const laidOutNodes = new Map();
+    Array.from(nodesByLevel.entries())
+        .sort((left, right) => left[0] - right[0])
+        .forEach(([level, levelNodes]) => {
+            levelNodes.forEach(({ node, index }, rowIndex) => {
+                laidOutNodes.set(node.nodeId, {
+                    ...node,
+                    x: AUTO_LAYOUT_START_X + level * AUTO_LAYOUT_COLUMN_GAP,
+                    y: AUTO_LAYOUT_START_Y + rowIndex * AUTO_LAYOUT_ROW_GAP,
+                    _order: index
+                });
+            });
+        });
+
+    return nodes
+        .map((node, index) => laidOutNodes.get(node.nodeId) || { ...node, _order: index })
+        .sort((left, right) => (left._order ?? 0) - (right._order ?? 0))
+        .map(({ _order, ...node }) => node);
+};
+
+const estimateNodeHeight = (node = {}) => (
+    NODE_CARD_BASE_HEIGHT + Math.max((node.choices || []).length, 1) * NODE_CHOICE_ROW_HEIGHT
+);
+
+const getNodesBounds = (nodes = []) => {
+    if (!nodes.length) {
+        return null;
+    }
+
+    const bounds = nodes.reduce((accumulator, node) => {
+        const x = Number.isFinite(Number(node?.x)) ? Number(node.x) : 0;
+        const y = Number.isFinite(Number(node?.y)) ? Number(node.y) : 0;
+        const width = NODE_CARD_WIDTH;
+        const height = estimateNodeHeight(node);
+
+        return {
+            minX: Math.min(accumulator.minX, x),
+            minY: Math.min(accumulator.minY, y),
+            maxX: Math.max(accumulator.maxX, x + width),
+            maxY: Math.max(accumulator.maxY, y + height)
+        };
+    }, {
+        minX: Number.POSITIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY
+    });
+
+    return {
+        ...bounds,
+        width: Math.max(bounds.maxX - bounds.minX, NODE_CARD_WIDTH),
+        height: Math.max(bounds.maxY - bounds.minY, NODE_CARD_BASE_HEIGHT)
+    };
+};
+
+const createScenarioDiagnostics = (nodes = [], preferredStartNodeId = '') => {
+    const warnings = [];
+
+    if (!nodes.length) {
+        warnings.push('Сценарій поки не містить жодного вузла.');
+        return warnings;
+    }
+
+    const startNodeId = getValidStartNodeId(nodes, preferredStartNodeId);
+    if (!preferredStartNodeId || preferredStartNodeId !== startNodeId) {
+        warnings.push('Стартовий вузол був відсутній або пошкоджений, редактор підставив резервний.');
+    }
+
+    const nodeIds = new Set(nodes.map((node) => node.nodeId));
+    const visited = new Set();
+    const queue = startNodeId ? [startNodeId] : [];
+
+    while (queue.length > 0) {
+        const currentId = queue.shift();
+        if (visited.has(currentId)) {
+            continue;
+        }
+
+        visited.add(currentId);
+        const currentNode = nodes.find((node) => node.nodeId === currentId);
+        (currentNode?.choices || []).forEach((choice) => {
+            if (choice?.nextNodeId && nodeIds.has(choice.nextNodeId) && !visited.has(choice.nextNodeId)) {
+                queue.push(choice.nextNodeId);
+            }
+        });
+    }
+
+    const unreachableNodes = nodes.filter((node) => !visited.has(node.nodeId));
+    if (unreachableNodes.length > 0) {
+        warnings.push(`Недосяжні вузли: ${unreachableNodes.slice(0, 3).map((node) => `"${String(node.text || '').slice(0, 24)}"`).join(', ')}${unreachableNodes.length > 3 ? '…' : ''}.`);
+    }
+
+    const nodesWithoutChoices = nodes.filter((node) => (node.choices || []).length === 0);
+    if (nodesWithoutChoices.length > 0) {
+        warnings.push(`Вузлів без жодного вибору: ${nodesWithoutChoices.length}.`);
+    }
+
+    const unfinishedChoices = [];
+    nodes.forEach((node) => {
+        (node.choices || []).forEach((choice, index) => {
+            const hasTarget = Boolean(choice?.nextNodeId);
+            const hasResult = Boolean(String(choice?.result || '').trim());
+            const hasText = Boolean(String(choice?.text || '').trim());
+
+            if (!hasText) {
+                unfinishedChoices.push(`У вузлі "${String(node.text || '').slice(0, 24)}" вибір ${String.fromCharCode(65 + index)} без тексту.`);
+                return;
+            }
+
+            if (!hasTarget && !hasResult) {
+                unfinishedChoices.push(`У вузлі "${String(node.text || '').slice(0, 24)}" вибір ${String.fromCharCode(65 + index)} не має переходу або фіналу.`);
+            }
+        });
+    });
+
+    return warnings.concat(unfinishedChoices.slice(0, 4));
+};
 
 const VisualGameBuilder = () => {
     const [scenarios, setScenarios] = useState([]);
@@ -41,12 +249,45 @@ const VisualGameBuilder = () => {
     const canvasRef = useRef(null);
     const minimapRef = useRef(null);
     const fileInputRef = useRef(null);
+    const feedbackTimeoutRef = useRef(null);
 
     useEffect(() => {
         fetchUser();
         fetchScenarios();
         fetchCities();
     }, []);
+
+    const clearFeedback = useCallback(() => {
+        if (feedbackTimeoutRef.current) {
+            clearTimeout(feedbackTimeoutRef.current);
+            feedbackTimeoutRef.current = null;
+        }
+    }, []);
+
+    const showFeedback = useCallback((message, type = 'success', duration = type === 'success' ? 3000 : 0) => {
+        clearFeedback();
+        if (type === 'error') {
+            setImportSuccess('');
+            setImportError(message);
+        } else {
+            setImportError('');
+            setImportSuccess(message);
+        }
+
+        if (duration > 0) {
+            feedbackTimeoutRef.current = setTimeout(() => {
+                setImportError('');
+                setImportSuccess('');
+                feedbackTimeoutRef.current = null;
+            }, duration);
+        }
+    }, [clearFeedback]);
+
+    const alert = useCallback((message) => {
+        showFeedback(String(message || 'Сталася помилка'), 'error');
+    }, [showFeedback]);
+
+    useEffect(() => () => clearFeedback(), [clearFeedback]);
 
     // Відкриваємо модальне вікно коли є дані для імпорту
     // useEffect(() => {
@@ -77,7 +318,10 @@ const VisualGameBuilder = () => {
             const res = await axios.get(`${API_URL}/game-scenarios`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setScenarios(res.data);
+            setScenarios((res.data || []).map((scenario) => ({
+                ...scenario,
+                targetCity: scenario.targetCity || scenario.city || ''
+            })));
         } catch (err) {
             console.error('fetchScenarios:', err);
         }
@@ -91,14 +335,16 @@ const VisualGameBuilder = () => {
     };
 
     const handleCopyLink = async (id) => {
+        if (!id) return;
         try {
             const token = localStorage.getItem('token');
             const res = await axios.post(`${API_URL}/game-links`, { scenarioId: id }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            await navigator.clipboard.writeText(`${window.location.origin}/game/${res.data.hash}`);
+            await copyText(`${window.location.origin}/game/${res.data.hash}`);
             setCopyStatus(id);
             setTimeout(() => setCopyStatus(null), 3000);
+            showFeedback('Посилання скопійовано', 'success', 2000);
         } catch (err) {
             console.error('handleCopyLink:', err);
             alert('Помилка копіювання');
@@ -115,14 +361,21 @@ const VisualGameBuilder = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             fetchScenarios();
+            showFeedback('Сценарій видалено', 'success', 2000);
         } catch (err) {
             console.error('Delete error', err);
+            alert('Не вдалося видалити сценарій');
         }
     };
 
     const openNew = () => {
+        clearFeedback();
+        setImportError('');
+        setImportSuccess('');
+        setCanvasOffset({ x: 0, y: 0 });
+        setZoom(1);
         const startId = genNodeId();
-        setEditing({
+        const nextScenario = normalizeScenario({
             _id: null,
             title: 'Новий сценарій',
             description: '',
@@ -138,14 +391,14 @@ const VisualGameBuilder = () => {
                 y: 100
             }]
         });
+        setEditing(nextScenario);
         setSelectedNodeId(startId);
         setActiveTab('canvas');
+        requestAnimationFrame(() => fitNodesToViewport(nextScenario.nodes));
     };
 
-    const normalizeScenario = (data) => ({
-        ...data,
-        characters: data.characters || [],
-        nodes: (data.nodes || []).map((n, i) => ({
+    const normalizeScenario = (data) => {
+        const baseNodes = (data.nodes || []).map((n, i) => ({
             ...n,
             x: n.x ?? (100 + (i % 5) * 280),
             y: n.y ?? 100 + Math.floor(i / 5) * 200,
@@ -154,18 +407,36 @@ const VisualGameBuilder = () => {
                 ...c,
                 choiceId: c.choiceId || genChoiceId()
             }))
-        }))
-    });
+        }));
+        const normalizedNodes = needsAutoLayout(baseNodes)
+            ? autoLayoutNodes(baseNodes, data.startNodeId)
+            : baseNodes;
+
+        return {
+            ...data,
+            targetCity: data.targetCity || data.city || '',
+            characters: data.characters || [],
+            startNodeId: getValidStartNodeId(normalizedNodes, data.startNodeId),
+            nodes: normalizedNodes
+        };
+    };
 
     const openEdit = async (id) => {
         try {
+            clearFeedback();
+            setImportError('');
+            setImportSuccess('');
+            setCanvasOffset({ x: 0, y: 0 });
+            setZoom(1);
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/game-scenarios/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setEditing(normalizeScenario(res.data));
-            setSelectedNodeId(res.data.startNodeId);
+            const normalizedScenario = normalizeScenario(res.data);
+            setEditing(normalizedScenario);
+            setSelectedNodeId(normalizedScenario.startNodeId);
             setActiveTab('canvas');
+            requestAnimationFrame(() => fitNodesToViewport(normalizedScenario.nodes));
         } catch (err) {
             console.error('openEdit:', err);
         }
@@ -173,15 +444,17 @@ const VisualGameBuilder = () => {
 
     const handleSave = async () => {
         if (!editing.title.trim()) { alert('Введіть назву'); return; }
+        if (!editing.nodes.length) { alert('Додайте хоча б один вузол'); return; }
         setSaving(true);
         try {
             const token = localStorage.getItem('token');
             const config = { headers: { Authorization: `Bearer ${token}` } };
+            const startNodeId = getValidStartNodeId(editing.nodes, editing.startNodeId);
 
             const payload = {
-                title: editing.title,
-                description: editing.description,
-                startNodeId: editing.startNodeId,
+                title: editing.title.trim(),
+                description: (editing.description || '').trim(),
+                startNodeId,
                 characters: (editing.characters || []).map(c => ({
                     charId: c.charId,
                     name: c.name,
@@ -196,25 +469,28 @@ const VisualGameBuilder = () => {
                     x: n.x,
                     y: n.y,
                     choices: n.choices.map(c => ({
+                        choiceId: c.choiceId || genChoiceId(),
                         text: c.text,
                         nextNodeId: c.nextNodeId || null,
                         isWin: c.isWin,
                         result: c.result
                     }))
                 })),
-                targetCity: user?.role === 'superadmin' ? editing.targetCity : undefined
+                targetCity: user?.role === 'superadmin' ? (editing.targetCity || '').trim() : undefined
             };
             if (editing._id) {
                 await axios.put(`${API_URL}/game-scenarios/${editing._id}`, payload, config);
+                setEditing(prev => ({ ...prev, startNodeId }));
             } else {
                 const res = await axios.post(`${API_URL}/game-scenarios`, payload, config);
-                setEditing(prev => ({ ...prev, _id: res.data._id }));
+                setEditing(prev => ({ ...prev, _id: res.data._id, startNodeId }));
             }
             await fetchScenarios();
             setLinkingFrom(null);
             setCharForm(null);
             setCopyStatus('SAVED_OK');
             setTimeout(() => setCopyStatus(null), 2000);
+            showFeedback('Сценарій збережено', 'success', 2000);
         } catch (err) {
             console.error('handleSave:', err);
             alert('Помилка збереження');
@@ -224,20 +500,18 @@ const VisualGameBuilder = () => {
     };
 
     const handleWheel = useCallback((e) => {
-        if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            const scaleFactor = 0.1;
-            const newZoom = e.deltaY > 0 ? Math.max(0.2, zoom - scaleFactor) : Math.min(2, zoom + scaleFactor);
-            const rect = canvasRef.current.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            const zoomRatio = newZoom / zoom;
-            setCanvasOffset(prev => ({
-                x: mouseX - (mouseX - prev.x) * zoomRatio,
-                y: mouseY - (mouseY - prev.y) * zoomRatio
-            }));
-            setZoom(newZoom);
-        }
+        e.preventDefault();
+        const scaleFactor = 0.1;
+        const newZoom = e.deltaY > 0 ? Math.max(0.2, zoom - scaleFactor) : Math.min(2, zoom + scaleFactor);
+        const rect = canvasRef.current.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const zoomRatio = newZoom / zoom;
+        setCanvasOffset(prev => ({
+            x: mouseX - (mouseX - prev.x) * zoomRatio,
+            y: mouseY - (mouseY - prev.y) * zoomRatio
+        }));
+        setZoom(newZoom);
     }, [zoom]);
 
     // Прикріплюємо wheel як non-passive (після визначення handleWheel), щоб дозволити preventDefault
@@ -294,6 +568,44 @@ const VisualGameBuilder = () => {
         setDraggedNodeId(null);
     };
 
+    const fitNodesToViewport = useCallback((nodesToFit = []) => {
+        const canvas = canvasRef.current;
+        const bounds = getNodesBounds(nodesToFit);
+        if (!canvas || !bounds) {
+            return;
+        }
+
+        const horizontalPadding = 120;
+        const verticalPadding = 120;
+        const availableWidth = Math.max(canvas.clientWidth - horizontalPadding, 240);
+        const availableHeight = Math.max(canvas.clientHeight - verticalPadding, 240);
+        const nextZoom = Math.min(
+            1.15,
+            Math.max(0.2, Math.min(availableWidth / bounds.width, availableHeight / bounds.height))
+        );
+
+        setZoom(nextZoom);
+        setCanvasOffset({
+            x: (canvas.clientWidth - bounds.width * nextZoom) / 2 - bounds.minX * nextZoom,
+            y: (canvas.clientHeight - bounds.height * nextZoom) / 2 - bounds.minY * nextZoom
+        });
+    }, []);
+
+    const handleAutoLayout = useCallback(() => {
+        if (!editing?.nodes?.length) {
+            return;
+        }
+
+        const laidOutNodes = autoLayoutNodes(editing.nodes, editing.startNodeId);
+        setEditing((prev) => ({
+            ...prev,
+            nodes: laidOutNodes
+        }));
+        setSelectedNodeId((prev) => getValidStartNodeId(laidOutNodes, prev || editing.startNodeId));
+        showFeedback('Вузли автоматично розкладено', 'success', 2200);
+        requestAnimationFrame(() => fitNodesToViewport(laidOutNodes));
+    }, [editing, fitNodesToViewport, showFeedback]);
+
     const handleNodeMouseDown = (e, nodeId) => {
         e.stopPropagation();
         if (linkingFrom) {
@@ -332,6 +644,36 @@ const VisualGameBuilder = () => {
             }]
         }));
         setSelectedNodeId(id);
+    };
+
+    const duplicateNode = (nodeId) => {
+        if (!editing) {
+            return;
+        }
+
+        const sourceNode = editing.nodes.find((node) => node.nodeId === nodeId);
+        if (!sourceNode) {
+            return;
+        }
+
+        const duplicatedNodeId = genNodeId();
+        const duplicatedNode = {
+            ...sourceNode,
+            nodeId: duplicatedNodeId,
+            x: (Number(sourceNode.x) || 0) + 80,
+            y: (Number(sourceNode.y) || 0) + 80,
+            choices: (sourceNode.choices || []).map((choice) => ({
+                ...choice,
+                choiceId: genChoiceId()
+            }))
+        };
+
+        setEditing((prev) => ({
+            ...prev,
+            nodes: [...prev.nodes, duplicatedNode]
+        }));
+        setSelectedNodeId(duplicatedNodeId);
+        showFeedback('Вузол продубльовано', 'success', 1800);
     };
 
     const addChoice = () => {
@@ -378,14 +720,31 @@ const VisualGameBuilder = () => {
     };
 
     const deleteNode = (nodeId) => {
-        setEditing(prev => ({
-            ...prev,
-            nodes: prev.nodes.filter(n => n.nodeId !== nodeId).map(n => ({
+        if (!editing || editing.nodes.length <= 1) {
+            alert('Потрібен хоча б один вузол');
+            return;
+        }
+
+        const remainingNodes = editing.nodes
+            .filter(n => n.nodeId !== nodeId)
+            .map(n => ({
                 ...n,
                 choices: n.choices.map(c => c.nextNodeId === nodeId ? { ...c, nextNodeId: null } : c)
-            }))
+            }));
+        const nextStartNodeId = editing.startNodeId === nodeId
+            ? getValidStartNodeId(remainingNodes, '')
+            : getValidStartNodeId(remainingNodes, editing.startNodeId);
+        const nextSelectedNodeId = selectedNodeId === nodeId
+            ? (nextStartNodeId || remainingNodes[0]?.nodeId || null)
+            : selectedNodeId;
+
+        setEditing(prev => ({
+            ...prev,
+            startNodeId: nextStartNodeId,
+            nodes: remainingNodes
         }));
-        if (selectedNodeId === nodeId) setSelectedNodeId(null);
+        setSelectedNodeId(nextSelectedNodeId);
+        setLinkingFrom(prev => (prev?.nodeId === nodeId ? null : prev));
     };
 
     const setAsStart = (nodeId) => {
@@ -819,7 +1178,7 @@ const VisualGameBuilder = () => {
                 startNodeId = newNodes[0].nodeId;
             }
 
-            const newScenario = {
+            const newScenario = normalizeScenario({
                 _id: null,
                 title: importData.title,
                 description: importData.description || '',
@@ -827,10 +1186,13 @@ const VisualGameBuilder = () => {
                 startNodeId,
                 characters: newChars,
                 nodes: newNodes
-            };
+            });
 
             setEditing(newScenario);
-            setSelectedNodeId(startNodeId);
+            setSelectedNodeId(newScenario.startNodeId);
+            setActiveTab('canvas');
+            setLinkingFrom(null);
+            setCharForm(null);
             setImportSuccess(`✅ Імпортовано ${newNodes.length} вузлів! Відкрито редактор.`);
             setTimeout(() => setImportSuccess(''), 5000);
         } catch (err) {
@@ -962,7 +1324,7 @@ const VisualGameBuilder = () => {
             return;
         }
         setImportData(data);
-        // setShowImportModal will be called by useEffect
+        setShowImportModal(true);
     };
 
     const confirmImport = () => {
@@ -1020,7 +1382,7 @@ const VisualGameBuilder = () => {
                 startNodeId = newNodes[0].nodeId;
             }
 
-            setEditing({
+            const importedScenario = normalizeScenario({
                 _id: null,
                 title: importData.title,
                 description: importData.description || '',
@@ -1029,7 +1391,11 @@ const VisualGameBuilder = () => {
                 characters: newChars,
                 nodes: newNodes
             });
-            setSelectedNodeId(startNodeId);
+            setEditing(importedScenario);
+            setSelectedNodeId(importedScenario.startNodeId);
+            setActiveTab('canvas');
+            setLinkingFrom(null);
+            setCharForm(null);
             setShowImportModal(false);
             setImportData(null);
             setImportSuccess('Сценарій успішно імпортовано!');
@@ -1130,8 +1496,22 @@ const VisualGameBuilder = () => {
         );
     };
 
+    const renderFeedbackBanners = () => (
+        <>
+            {importSuccess && (
+                <div className="n8n-alert n8n-alert-success">{importSuccess}</div>
+            )}
+            {importError && (
+                <div className="n8n-alert n8n-alert-error">{importError}</div>
+            )}
+        </>
+    );
+
     if (!editing) {
-        const filteredScenarios = scenarios.filter(s => !filterCity || s.targetCity === filterCity);
+        const filteredScenarios = scenarios.filter(s => {
+            const scenarioCity = s.targetCity || s.city || '';
+            return !filterCity || scenarioCity === filterCity;
+        });
         return (
             <div className="n8n-builder-container">
                 <div className="n8n-header">
@@ -1165,12 +1545,7 @@ const VisualGameBuilder = () => {
                     accept=".json,.xlsx,.xls"
                     onChange={handleFileChange}
                 />
-                {importSuccess && (
-                    <div className="n8n-alert n8n-alert-success">{importSuccess}</div>
-                )}
-                {importError && (
-                    <div className="n8n-alert n8n-alert-error">{importError}</div>
-                )}
+                {renderFeedbackBanners()}
                 <div className="n8n-scenarios-grid">
                     {filteredScenarios.map(s => (
                         <div key={s._id} className="n8n-scenario-card">
@@ -1178,6 +1553,8 @@ const VisualGameBuilder = () => {
                                 <h3>{s.title}</h3>
                                 {s.targetCity && <span className="n8n-city-badge">📍 {s.targetCity}</span>}
                             </div>
+                            <button className="n8n-canvas-btn" onClick={handleAutoLayout} title="Автоматично розкласти вузли для зручного редагування">Auto</button>
+                            <button className="n8n-canvas-btn" onClick={() => fitNodesToViewport(editing.nodes)} title="Вмістити всі вузли у видиму область">Fit</button>
                             <p className="n8n-scenario-desc">{s.description || 'Без опису'}</p>
                             <div className="n8n-scenario-footer">
                                 <span className="n8n-date">{new Date(s.createdAt).toLocaleDateString('uk-UA')}</span>
@@ -1195,6 +1572,12 @@ const VisualGameBuilder = () => {
                         </div>
                     ))}
                 </div>
+                {filteredScenarios.length === 0 && (
+                    <div className="n8n-empty-state">
+                        <p>{filterCity ? 'Для вибраного міста сценаріїв поки немає.' : 'Сценарії ще не створені.'}</p>
+                        <button className="n8n-btn n8n-btn-primary" onClick={openNew}>+ Створити сценарій</button>
+                    </div>
+                )}
                 <ConfirmModal
                     isOpen={confirmModal.isOpen}
                     title="Видалення сценарію"
@@ -1208,6 +1591,8 @@ const VisualGameBuilder = () => {
     }
 
     const selectedNode = editing.nodes.find(n => n.nodeId === selectedNodeId);
+    const scenarioDiagnostics = createScenarioDiagnostics(editing.nodes, editing.startNodeId);
+    const hasScenarioWarnings = scenarioDiagnostics.length > 0;
 
     return (
         <div className="n8n-full-editor">
@@ -1247,6 +1632,19 @@ const VisualGameBuilder = () => {
                     </button>
                 </div>
             </header>
+
+            <div className="n8n-editor-feedback">
+                {renderFeedbackBanners()}
+            </div>
+
+            <div className="n8n-editor-hints">
+                <span>Підказка: колесо мишки змінює масштаб канваса.</span>
+                <span>Авто розкладає вузли по рівнях, а Fit вміщує всю схему в екран.</span>
+                <div className="n8n-editor-hint-actions">
+                    <button className="n8n-btn n8n-btn-secondary n8n-btn-small" onClick={handleAutoLayout} title="Автоматично розкласти вузли для зручного редагування">Auto</button>
+                    <button className="n8n-btn n8n-btn-secondary n8n-btn-small" onClick={() => fitNodesToViewport(editing.nodes)} title="Вмістити всі вузли у видиму область">Fit</button>
+                </div>
+            </div>
 
             {activeTab === 'canvas' ? (
                 <div className="n8n-canvas-wrapper">
@@ -1373,6 +1771,27 @@ const VisualGameBuilder = () => {
                             <h3>Властивості вузла</h3>
                         </div>
                         <div className="n8n-sidebar-content">
+                            <div className={`n8n-health-panel ${hasScenarioWarnings ? 'has-issues' : 'is-clean'}`}>
+                                <div className="n8n-health-header">
+                                    <span>Перевірка сценарію</span>
+                                    <strong>{hasScenarioWarnings ? `${scenarioDiagnostics.length} попер.` : 'OK'}</strong>
+                                </div>
+                                {hasScenarioWarnings ? (
+                                    <ul className="n8n-health-list">
+                                        {scenarioDiagnostics.slice(0, 5).map((diagnostic, index) => (
+                                            <li key={`${index}-${diagnostic}`}>{diagnostic}</li>
+                                        ))}
+                                    </ul>
+                                ) : (
+                                    <p className="n8n-health-empty">Грубі проблеми не знайдені. Можна спокійно редагувати далі.</p>
+                                )}
+                            </div>
+
+                            <div className="n8n-helper-card">
+                                <div className="n8n-helper-card-title">Швидкі підказки</div>
+                                <div className="n8n-helper-card-text">Колесо мишки масштабує канвас, Auto розкладає вузли, Fit підганяє схему у видиму область.</div>
+                            </div>
+
                             {selectedNode ? (
                                 <>
                                     <div className="n8n-form-group">
@@ -1400,6 +1819,12 @@ const VisualGameBuilder = () => {
                                             value={selectedNode.text}
                                             onChange={e => updateSelectedNode('text', e.target.value)}
                                         />
+                                        <div className="n8n-inline-actions">
+                                            <button className="n8n-btn n8n-btn-secondary n8n-btn-small" onClick={() => duplicateNode(selectedNode.nodeId)} title="Створити копію поточного вузла поруч">Дублювати вузол</button>
+                                            {editing.startNodeId !== selectedNode.nodeId && (
+                                                <button className="n8n-btn n8n-btn-secondary n8n-btn-small" onClick={() => setAsStart(selectedNode.nodeId)} title="Зробити цей вузол стартовим">Зробити стартовим</button>
+                                            )}
+                                        </div>
                                     </div>
 
                                     <div className="n8n-form-group">

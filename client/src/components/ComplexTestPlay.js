@@ -24,9 +24,6 @@ const ComplexTestPlay = () => {
     const [stepDone, setStepDone] = useState(false);
     const [currentStepResult, setCurrentStepResult] = useState(null);
 
-    // Dishes for desk steps
-    const [dishes, setDishes] = useState([]);
-
     // Game state (no shared engine — stays inline)
     const [currentNodeId, setCurrentNodeId] = useState(null);
     const [gameEnding, setGameEnding] = useState(null);
@@ -34,15 +31,11 @@ const ComplexTestPlay = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [testRes, dishesRes] = await Promise.all([
-                    axios.get(`${API_URL}/complex-tests/hash/${hash}`),
-                    axios.get(`${API_URL}/dishes`)
-                ]);
+                const testRes = await axios.get(`${API_URL}/complex-tests/hash/${hash}`);
                 setTestData(testRes.data);
                 if (testRes.data.city) {
                     setStudentInfo(prev => ({ ...prev, city: testRes.data.city }));
                 }
-                setDishes(dishesRes.data.map(d => ({ ...d, id: d._id })));
             } catch (err) {
                 console.error('Error fetching complex test data:', err);
                 if (err.response?.status === 410) navigate('/inactive');
@@ -51,10 +44,17 @@ const ComplexTestPlay = () => {
             }
         };
         fetchData();
-    }, [hash]);
+    }, [hash, navigate]);
 
     const steps = testData?.steps || [];
     const step = steps[currentStep];
+    const deskStepDishes = step?.type === 'desk'
+        ? (step.refData?.allowedItems || []).map((item) => ({
+            ...item,
+            _id: item.id || item.type,
+            id: item.id || item.type,
+        }))
+        : [];
 
     // Reset per-step state when step changes
     useEffect(() => {
@@ -267,7 +267,7 @@ const ComplexTestPlay = () => {
                 {step?.type === 'desk' && step.refData && (
                     <DeskEngine
                         key={`desk-${currentStep}`}
-                        dishes={dishes}
+                        dishes={deskStepDishes}
                         description={step.refData.description}
                         timeLimit={step.timeLimit || step.refData?.timeLimit || 0}
                         onSubmit={handleDeskSubmit}
@@ -330,6 +330,8 @@ const ComplexTestPlay = () => {
                             timeLimit={step.refData.timeLimit || 0}
                             title={step.title}
                             embedded
+                            initialQuestionIndex={step.refData.attemptProgress || 0}
+                            initialAnswers={step.refData.attemptAnswers || []}
                         />
                     </div>
                 )}

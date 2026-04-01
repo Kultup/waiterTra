@@ -1,66 +1,113 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import VideoPlayer from './VideoPlayer';
 import './QuizEngine.css';
 import { resolveAssetUrl } from '../utils/assetUrl';
 
-/**
- * Shared quiz engine — one question at a time, server-side answer checking.
- *
- * Props:
- *   questions     — array of { text, options, image?, video? } (NO correctIndex)
- *   checkAnswer   — async (questionIndex, answerIndex) => { isCorrect, correctIndex, explanation }
- *   onComplete    — (result) => void   where result = { score, total, percentage, passed, answers }
- *   passingScore  — number (default 80)
- *   timeLimit     — minutes (0 = no limit)
- *   title         — string (shown in header)
- *   embedded      — boolean (true when inside ComplexTestPlay, hides outer chrome)
- */
-const QuizEngine = ({ questions, checkAnswer, onComplete, passingScore = 80, timeLimit = 0, title, embedded = false }) => {
-    const [currentQ, setCurrentQ] = useState(0);
+const QuizEngine = ({
+    questions,
+    checkAnswer,
+    onComplete,
+    passingScore = 80,
+    timeLimit = 0,
+    title,
+    embedded = false,
+    initialQuestionIndex = 0,
+    initialAnswers = []
+}) => {
+    const totalQ = questions.length;
+    const [currentQ, setCurrentQ] = useState(() => Math.min(initialQuestionIndex, totalQ));
     const [revealed, setRevealed] = useState(false);
     const [checking, setChecking] = useState(false);
-    const [answers, setAnswers] = useState([]); // { questionIndex, answerIndex, isCorrect, correctIndex, explanation }
+    const [answers, setAnswers] = useState(() => initialAnswers);
     const [done, setDone] = useState(false);
-
-    // Timer
     const [timeLeft, setTimeLeft] = useState(null);
     const timerRef = useRef(null);
     const onCompleteRef = useRef(onComplete);
     onCompleteRef.current = onComplete;
 
+    const finishQuiz = useCallback((finalAnswers) => {
+        if (done) return;
+
+        setDone(true);
+        if (timerRef.current) clearInterval(timerRef.current);
+
+        const score = finalAnswers.filter((answer) => answer.isCorrect).length;
+        const total = totalQ;
+        const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
+        const passed = percentage >= passingScore;
+
+        const detailedAnswers = questions.map((question, index) => {
+            const answer = finalAnswers.find((entry) => entry.questionIndex === index);
+            const givenAnswer = answer && Number.isInteger(answer.answerIndex)
+                ? question.options[answer.answerIndex] || '—'
+                : '—';
+            const correctAnswer = answer && Number.isInteger(answer.correctIndex)
+                ? question.options[answer.correctIndex] || '?'
+                : (answer?.isCorrect ? givenAnswer : '?');
+
+            return {
+                questionText: question.text,
+                image: question.image,
+                video: question.video,
+                givenAnswer,
+                correctAnswer,
+                explanation: answer?.explanation || null,
+                isCorrect: answer?.isCorrect || false
+            };
+        });
+
+        onCompleteRef.current({ score, total, percentage, passed, answers: detailedAnswers });
+    }, [done, passingScore, questions, totalQ]);
+
     useEffect(() => {
         if (timeLimit > 0) {
             setTimeLeft(timeLimit * 60);
         }
-        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
     }, [timeLimit]);
 
     useEffect(() => {
-        if (timeLeft === null || done) return;
+        if (timeLeft === null || done) return undefined;
         if (timeLeft <= 0) {
-            // Auto-finish
             finishQuiz(answers);
-            return;
+            return undefined;
         }
-        timerRef.current = setInterval(() => setTimeLeft(p => p - 1), 1000);
+
+        timerRef.current = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
         return () => clearInterval(timerRef.current);
-    }, [timeLeft, done]);
+    }, [answers, done, finishQuiz, timeLeft]);
 
-    const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+    useEffect(() => {
+        if (!done && totalQ > 0 && currentQ >= totalQ) {
+            finishQuiz(answers);
+        }
+    }, [answers, currentQ, done, finishQuiz, totalQ]);
 
-    const totalQ = questions.length;
+    const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
+
     const q = questions[currentQ];
 
     const handleSelect = async (answerIndex) => {
         if (revealed || checking) return;
+
         setChecking(true);
         try {
-            const res = await checkAnswer(currentQ, answerIndex);
-            const entry = { questionIndex: currentQ, answerIndex, ...res };
-            setAnswers(prev => [...prev, entry]);
+            const response = await checkAnswer(currentQ, answerIndex);
+            const entry = { questionIndex: currentQ, answerIndex, ...response };
+            setAnswers((prev) => {
+                const existingIndex = prev.findIndex((answer) => answer.questionIndex === currentQ);
+                if (existingIndex === -1) return [...prev, entry];
+
+                const next = [...prev];
+                next[existingIndex] = { ...next[existingIndex], ...entry };
+                return next;
+            });
             setRevealed(true);
-        } catch (err) {
-            console.error('Check answer error:', err);
+        } catch (error) {
+            console.error('Check answer error:', error);
         } finally {
             setChecking(false);
         }
@@ -69,59 +116,48 @@ const QuizEngine = ({ questions, checkAnswer, onComplete, passingScore = 80, tim
     const handleNext = () => {
         if (currentQ < totalQ - 1) {
             setRevealed(false);
-            setCurrentQ(currentQ + 1);
-        } else {
-            finishQuiz([...answers]);
+            setCurrentQ((prev) => prev + 1);
+            return;
         }
+
+        finishQuiz([...answers]);
     };
 
-    const finishQuiz = (finalAnswers) => {
-        if (done) return;
-        setDone(true);
-        if (timerRef.current) clearInterval(timerRef.current);
-
-        const score = finalAnswers.filter(a => a.isCorrect).length;
-        const total = totalQ;
-        const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-        const passed = percentage >= passingScore;
-
-        // Build detailed answers for result storage
-        const detailedAnswers = questions.map((q, idx) => {
-            const a = finalAnswers.find(ans => ans.questionIndex === idx);
-            return {
-                questionText: q.text,
-                image: q.image,
-                video: q.video,
-                givenAnswer: a ? q.options[a.answerIndex] || '—' : '—',
-                correctAnswer: a ? q.options[a.correctIndex] || '?' : '?',
-                explanation: a?.explanation || null,
-                isCorrect: a?.isCorrect || false
-            };
-        });
-
-        onCompleteRef.current({ score, total, percentage, passed, answers: detailedAnswers });
-    };
-
-    // Current answer data (if revealed)
-    const currentAnswer = revealed ? answers.find(a => a.questionIndex === currentQ) : null;
+    const currentAnswer = revealed ? answers.find((answer) => answer.questionIndex === currentQ) : null;
     const selectedIdx = currentAnswer?.answerIndex;
     const correctIdx = currentAnswer?.correctIndex;
 
-    const optionCls = (oi) => {
+    const optionCls = (optionIndex) => {
         if (!revealed) return 'qe-option';
-        if (oi === correctIdx) return 'qe-option correct';
-        if (oi === selectedIdx) return 'qe-option wrong';
+        if (Number.isInteger(correctIdx)) {
+            if (optionIndex === correctIdx) return 'qe-option correct';
+            if (optionIndex === selectedIdx) return 'qe-option wrong';
+            return 'qe-option dimmed';
+        }
+        if (optionIndex === selectedIdx) {
+            return `qe-option ${currentAnswer?.isCorrect ? 'correct' : 'wrong'}`;
+        }
         return 'qe-option dimmed';
     };
 
-    if (done) return null; // parent handles result display
+    const renderOptionMark = (optionIndex) => {
+        if (!revealed || optionIndex !== selectedIdx) return null;
+        if (Number.isInteger(correctIdx)) {
+            return optionIndex !== correctIdx ? <span className="qe-mark wrong">✕</span> : null;
+        }
+        return currentAnswer?.isCorrect
+            ? <span className="qe-mark correct">✓</span>
+            : <span className="qe-mark wrong">✕</span>;
+    };
+
+    if (done) return null;
+    if (!q) return null;
 
     return (
         <div className={`qe-root ${embedded ? 'embedded' : ''}`}>
-            {/* Timer */}
             {timeLeft !== null && !done && (
                 <div className={`qe-timer ${timeLeft < 60 ? 'warning' : ''}`}>
-                    🕒 {formatTime(timeLeft)}
+                    ⏲ {formatTime(timeLeft)}
                 </div>
             )}
 
@@ -132,10 +168,12 @@ const QuizEngine = ({ questions, checkAnswer, onComplete, passingScore = 80, tim
             )}
 
             <div className="qe-progress-wrap">
-                <span className="qe-progress-label">Питання {currentQ + 1} з {totalQ}</span>
+                <span className="qe-progress-label">Питання {Math.min(currentQ + 1, totalQ)} з {totalQ}</span>
                 <div className="qe-progress-bar">
-                    <div className="qe-progress-fill"
-                        style={{ width: `${((currentQ + (revealed ? 1 : 0)) / totalQ) * 100}%` }} />
+                    <div
+                        className="qe-progress-fill"
+                        style={{ width: `${totalQ > 0 ? ((currentQ + (revealed ? 1 : 0)) / totalQ) * 100 : 0}%` }}
+                    />
                 </div>
             </div>
 
@@ -144,8 +182,7 @@ const QuizEngine = ({ questions, checkAnswer, onComplete, passingScore = 80, tim
 
                 {q.image && (
                     <div className="qe-media">
-                        <img src={resolveAssetUrl(q.image)}
-                            alt="" className="qe-q-image" />
+                        <img src={resolveAssetUrl(q.image)} alt="" className="qe-q-image" />
                     </div>
                 )}
                 {q.video && (
@@ -155,14 +192,17 @@ const QuizEngine = ({ questions, checkAnswer, onComplete, passingScore = 80, tim
                 )}
 
                 <div className="qe-options">
-                    {q.options.map((opt, oi) => (
-                        <button key={oi} className={optionCls(oi)}
-                            onClick={() => handleSelect(oi)}
+                    {q.options.map((option, optionIndex) => (
+                        <button
+                            key={optionIndex}
+                            className={optionCls(optionIndex)}
+                            onClick={() => handleSelect(optionIndex)}
                             disabled={revealed || checking}
-                            style={revealed ? { cursor: 'default' } : {}}>
-                            <span className="qe-option-text">{opt}</span>
-                            {revealed && oi === correctIdx && <span className="qe-mark correct">✓</span>}
-                            {revealed && oi === selectedIdx && oi !== correctIdx && <span className="qe-mark wrong">✗</span>}
+                            style={revealed ? { cursor: 'default' } : {}}
+                        >
+                            <span className="qe-option-text">{option}</span>
+                            {revealed && Number.isInteger(correctIdx) && optionIndex === correctIdx && <span className="qe-mark correct">✓</span>}
+                            {renderOptionMark(optionIndex)}
                         </button>
                     ))}
                 </div>
@@ -170,7 +210,7 @@ const QuizEngine = ({ questions, checkAnswer, onComplete, passingScore = 80, tim
                 {checking && <div className="qe-checking">Перевірка...</div>}
 
                 {revealed && currentAnswer?.explanation && (
-                    <div className="qe-explanation">💡 {currentAnswer.explanation}</div>
+                    <div className="qe-explanation">Підказка: {currentAnswer.explanation}</div>
                 )}
 
                 {revealed && (

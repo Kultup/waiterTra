@@ -1,8 +1,10 @@
 const express = require('express');
 const DeskState = require('../models/DeskState');
-const { auth } = require('../middleware/authMiddleware');
+const { auth, checkRole } = require('../middleware/authMiddleware');
+const { DESK_EDITOR_ROLES } = require('../utils/accessPolicy');
 
 const router = express.Router();
+const deskEditorAuth = [auth, checkRole(DESK_EDITOR_ROLES)];
 
 const DEFAULT_STATE = {
   underlays: [],
@@ -10,7 +12,7 @@ const DEFAULT_STATE = {
   deskSurfaceColor: '#ffffff',
 };
 
-router.get('/', auth, async (req, res) => {
+router.get('/', deskEditorAuth, async (req, res) => {
   try {
     const state = await DeskState.findOne({ ownerId: req.user._id }).lean();
     if (!state) {
@@ -27,7 +29,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-router.put('/', auth, async (req, res) => {
+router.put('/', deskEditorAuth, async (req, res) => {
   const payload = {};
 
   if (req.body.underlays !== undefined) {
@@ -73,7 +75,7 @@ router.put('/', auth, async (req, res) => {
   }
 });
 
-router.delete('/', auth, async (req, res) => {
+router.delete('/', deskEditorAuth, async (req, res) => {
   try {
     await DeskState.findOneAndDelete({ ownerId: req.user._id });
     res.json({ message: 'Desk state cleared' });

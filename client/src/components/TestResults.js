@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import * as XLSX from 'xlsx';
@@ -14,6 +14,11 @@ const formatDate = (dateStr) =>
 
 const initials = (...parts) =>
     parts.filter(Boolean).map(s => s[0]?.toUpperCase()).join('');
+
+const getResultFirstName = (result) => result?.studentName || result?.playerName || '';
+const getResultLastName = (result) => result?.studentLastName || result?.playerLastName || '';
+const getResultCity = (result) => result?.studentCity || result?.playerCity || result?.city || '';
+const getResultPosition = (result) => result?.studentPosition || result?.playerPosition || result?.position || '';
 
 // ── Editable city field ───────────────────────────────────────────────────────
 
@@ -437,13 +442,13 @@ const TestResults = ({ user }) => {
 
     const isAdminCityOnly = user?.role !== 'superadmin' && user?.city;
 
-    const filterByCity = (list) => {
+    const filterByCity = useCallback((list) => {
         if (!isAdminCityOnly) return list;
         return list.filter(item => {
-            const city = item.studentCity || item.playerCity;
+            const city = getResultCity(item);
             return city?.toLowerCase() === user.city.toLowerCase();
         });
-    };
+    }, [isAdminCityOnly, user?.city]);
 
     useEffect(() => {
         axios.get(`${API_URL}/cities${getUserPlatform() ? `?platform=${getUserPlatform()}` : ''}`, {
@@ -451,7 +456,7 @@ const TestResults = ({ user }) => {
         }).then(res => setCities(res.data)).catch(() => {});
     }, []);
 
-    const fetchAll = async () => {
+    const fetchAll = useCallback(async () => {
         setLoading(true);
         try {
             const config = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
@@ -470,9 +475,9 @@ const TestResults = ({ user }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filterByCity]);
 
-    useEffect(() => { fetchAll(); }, []);
+    useEffect(() => { fetchAll(); }, [fetchAll]);
 
     // WebSocket real-time updates
     useEffect(() => {
@@ -544,7 +549,7 @@ const TestResults = ({ user }) => {
     const applyFilters = (list) => {
         let f = list;
         if (filterCity) {
-            f = f.filter(r => (r.studentCity || r.playerCity) === filterCity);
+            f = f.filter(r => getResultCity(r) === filterCity);
         }
         if (filterDays > 0) {
             const cutoff = new Date();
@@ -554,8 +559,8 @@ const TestResults = ({ user }) => {
         if (search) {
             const q = search.toLowerCase();
             f = f.filter(r => {
-                const name = `${r.studentLastName || r.playerLastName || ''} ${r.studentName || r.playerName || ''}`.toLowerCase();
-                const city = (r.studentCity || r.playerCity || '').toLowerCase();
+                const name = `${getResultLastName(r)} ${getResultFirstName(r)}`.toLowerCase();
+                const city = getResultCity(r).toLowerCase();
                 return name.includes(q) || city.includes(q);
             });
         }
@@ -665,10 +670,10 @@ const TestResults = ({ user }) => {
         // ── Game ──
         const gameData = filteredGame.map(r => ({
             'Дата': formatDate(r.completedAt),
-            'Прізвище': r.playerLastName,
-            "Ім'я": r.playerName,
-            'Місто': r.playerCity,
-            'Посада': r.playerPosition || '—',
+            'Прізвище': getResultLastName(r),
+            "Ім'я": getResultFirstName(r),
+            'Місто': getResultCity(r) || '—',
+            'Посада': getResultPosition(r) || '—',
             'Сценарій': r.scenarioTitle,
             'Кінцівка': r.endingTitle || '—',
             'Статус': r.isWin ? 'Перемога' : 'Поразка',
@@ -777,7 +782,7 @@ const TestResults = ({ user }) => {
             });
         };
         addCity(filteredDesk, r => r.studentCity, r => r.passed);
-        addCity(filteredGame, r => r.playerCity, r => r.isWin);
+        addCity(filteredGame, r => getResultCity(r), r => r.isWin);
         addCity(filteredQuiz, r => r.studentCity, r => r.passed);
         addCity(filteredComplex, r => r.studentCity, r => r.overallPassed);
 
@@ -941,10 +946,10 @@ const TestResults = ({ user }) => {
                                 {items.map(r => (
                                     <ResultCard key={r._id} onClick={() => openDetail('game', r)}
                                         passed={r.isWin}
-                                        avatarText={initials(r.playerLastName, r.playerName)}
-                                        name={`${r.playerLastName} ${r.playerName}`}
-                                        sub={r.playerPosition || '—'}
-                                        city={r.playerCity}
+                                        avatarText={initials(getResultLastName(r), getResultFirstName(r))}
+                                        name={`${getResultLastName(r)} ${getResultFirstName(r)}`.trim()}
+                                        sub={getResultPosition(r) || '—'}
+                                        city={getResultCity(r) || '—'}
                                         date={formatDate(r.completedAt)}
                                         extra={<span className="tr-ending">{r.endingTitle || '—'}</span>}
                                         score={<span className={`tr-pill ${r.isWin ? 'pass' : 'fail'}`}>{r.isWin ? 'Перемога' : 'Поразка'}</span>}

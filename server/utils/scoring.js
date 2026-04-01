@@ -99,13 +99,23 @@ function validateDeskPlacement(userItems, targetItems, tolerance = 50) {
   const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
   const passed = percentage >= 80;
 
-  const ghostItems = targetItems.map((item) => ({
-    type: item.type,
-    name: item.name,
-    icon: item.icon,
-    x: item.x,
-    y: item.y,
-  }));
+  const ghostItems = targetItems
+    .filter((target) => !userItems.some((userItem) => (
+      String(userItem.type) === String(target.type) &&
+      Math.abs(userItem.x - target.x) < tolerance &&
+      Math.abs(userItem.y - target.y) < tolerance
+    )))
+    .map((item) => ({
+      type: item.type,
+      name: item.name,
+      icon: item.icon,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+      rotation: item.rotation,
+      zIndex: item.zIndex,
+    }));
 
   return {
     score,

@@ -3,14 +3,55 @@ const TestResult = require('../models/TestResult');
 const GameResult = require('../models/GameResult');
 const QuizResult = require('../models/QuizResult');
 const ComplexTestResult = require('../models/ComplexTestResult');
-const { auth } = require('../middleware/authMiddleware');
+const { auth, checkRole } = require('../middleware/authMiddleware');
 const { buildResultFilter } = require('../utils/platformFilter');
+const { DASHBOARD_ROLES } = require('../utils/accessPolicy');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
+const getResultFirstName = (result) => result?.studentName || result?.playerName || '';
+const getResultLastName = (result) => result?.studentLastName || result?.playerLastName || '';
+const getResultCity = (result) => result?.studentCity || result?.playerCity || result?.city || '';
+const getResultPosition = (result) => result?.studentPosition || result?.playerPosition || result?.position || '';
+const getResultPercentage = (result) => {
+  if (typeof result?.percentage === 'number') {
+    return result.percentage;
+  }
+  return result?.passed ? 100 : 0;
+};
+
+const buildAggregateSummary = (results, getValue) => {
+  const summaryMap = new Map();
+
+  results.forEach((result) => {
+    const key = getValue(result) || 'Невідомо';
+    if (!summaryMap.has(key)) {
+      summaryMap.set(key, { name: key, count: 0, passed: 0, totalPercentage: 0 });
+    }
+
+    const bucket = summaryMap.get(key);
+    bucket.count += 1;
+    if (result.passed) {
+      bucket.passed += 1;
+    }
+    bucket.totalPercentage += getResultPercentage(result);
+  });
+
+  return Array.from(summaryMap.values())
+    .map((entry) => ({
+      name: entry.name,
+      count: entry.count,
+      passed: entry.passed,
+      failed: entry.count - entry.passed,
+      successRate: entry.count > 0 ? Math.round((entry.passed / entry.count) * 100) : 0,
+      avgPercentage: entry.count > 0 ? Math.round(entry.totalPercentage / entry.count) : 0
+    }))
+    .sort((left, right) => right.count - left.count || right.successRate - left.successRate);
+};
+
 // Зведена статистика для Dashboard
-router.get('/overview', auth, async (req, res) => {
+router.get('/overview', auth, checkRole(DASHBOARD_ROLES), async (req, res) => {
   try {
     const { city, days = 30 } = req.query;
 
@@ -76,16 +117,25 @@ router.get('/overview', auth, async (req, res) => {
       }
     });
 
-    const chartData = Object.values(resultsByDay).slice(-14);
+    const chartData = Object.values(resultsByDay)
+      .sort((left, right) => {
+        const [leftDay, leftMonth, leftYear] = left.date.split('.').map(Number);
+        const [rightDay, rightMonth, rightYear] = right.date.split('.').map(Number);
+        return new Date(leftYear, leftMonth - 1, leftDay) - new Date(rightYear, rightMonth - 1, rightDay);
+      })
+      .slice(-14);
 
     // Топ-5 найнижчих результатів
     const sortedByScore = [...allResults].sort((a, b) => (a.percentage || 0) - (b.percentage || 0));
     const weakSpots = sortedByScore.slice(0, 5).map(r => ({
-      student: `${r.studentLastName || r.playerLastName} ${r.studentName || r.playerName}`,
+      student: `${getResultLastName(r)} ${getResultFirstName(r)}`.trim(),
       type: r.type,
       percentage: r.percentage || (r.passed ? 100 : 0),
       date: new Date(r.completedAt).toLocaleDateString('uk-UA')
     }));
+
+    const byCity = buildAggregateSummary(allResults, getResultCity);
+    const byPosition = buildAggregateSummary(allResults, getResultPosition);
 
     // Середній % по типах тестів
     const avgByType = {
@@ -115,6 +165,8 @@ router.get('/overview', auth, async (req, res) => {
       overallPercentage,
       chartData,
       weakSpots,
+      byCity,
+      byPosition,
       avgByType,
       byType: {
         test: testResults.length,
@@ -122,7 +174,9 @@ router.get('/overview', auth, async (req, res) => {
         quiz: quizResults.length,
         complex: complexResults.length
       },
-      recentResults: allResults.slice(0, 10)
+      recentResults: [...allResults]
+        .sort((left, right) => new Date(right.completedAt) - new Date(left.completedAt))
+        .slice(0, 10)
     });
   } catch (err) {
     logger.error('Stats overview error:', { error: err.message, stack: err.stack });
@@ -131,18 +185,19 @@ router.get('/overview', auth, async (req, res) => {
 });
 
 // Отримати список міст для фільтрів
-router.get('/cities', auth, async (req, res) => {
+router.get('/cities', auth, checkRole(DASHBOARD_ROLES), async (req, res) => {
   try {
     const ownerFilter = await buildResultFilter(req.user, 'studentCity');
 
     // Отримуємо унікальні міста лише з тих результатів, до яких є доступ
-    const [testCities, gameCities, quizCities] = await Promise.all([
+    const [testCities, gameCities, quizCities, complexCities] = await Promise.all([
       TestResult.distinct('studentCity', ownerFilter),
       GameResult.distinct('city', ownerFilter),
-      QuizResult.distinct('studentCity', ownerFilter)
+      QuizResult.distinct('studentCity', ownerFilter),
+      ComplexTestResult.distinct('studentCity', ownerFilter)
     ]);
 
-    const allCities = [...new Set([...testCities, ...gameCities, ...quizCities])].filter(Boolean);
+    const allCities = [...new Set([...testCities, ...gameCities, ...quizCities, ...complexCities])].filter(Boolean);
 
     res.json(allCities);
   } catch (err) {

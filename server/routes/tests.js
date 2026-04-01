@@ -5,21 +5,32 @@ const DeskTemplate = require('../models/DeskTemplate');
 const MultiDeskTest = require('../models/MultiDeskTest');
 const TestResult = require('../models/TestResult');
 const PageView = require('../models/PageView');
-const { auth } = require('../middleware/authMiddleware');
+const { auth, checkRole } = require('../middleware/authMiddleware');
 const { syncStudent } = require('../utils/studentSync');
 const { validateDeskPlacement } = require('../utils/scoring');
-const { buildBaseFilter } = require('../utils/platformFilter');
+const { buildBaseFilter, buildOwnerQuery } = require('../utils/platformFilter');
+const { DESK_EDITOR_ROLES } = require('../utils/accessPolicy');
+const { getBindingCity, assertCityBinding } = require('../utils/publicCityBinding');
+const { buildPublicDeskTemplate } = require('../utils/publicDeskPayload');
 const router = express.Router();
+const deskEditorAuth = [auth, checkRole(DESK_EDITOR_ROLES)];
 
 // ── Multi-desk test (адмін створює, студент проходить) ────────────────────────
 
 // Admin: create multi-desk test
-router.post('/multi', auth, async (req, res) => {
+router.post('/multi', deskEditorAuth, async (req, res) => {
   const { templateIds } = req.body;
   if (!Array.isArray(templateIds) || templateIds.length === 0) {
     return res.status(400).json({ error: 'templateIds повинен бути непорожнім масивом' });
   }
   try {
+    const templateQuery = buildBaseFilter(req.user);
+    templateQuery._id = { $in: templateIds };
+    const templates = await DeskTemplate.find(templateQuery, '_id');
+    if (templates.length !== templateIds.length) {
+      return res.status(403).json({ error: 'Р§Р°СЃС‚РёРЅР° С€Р°Р±Р»РѕРЅС–РІ РЅРµРґРѕСЃС‚СѓРїРЅР° РґР»СЏ С†СЊРѕРіРѕ РєРѕСЂРёСЃС‚СѓРІР°С‡Р°' });
+    }
+
     const hash = crypto.randomBytes(16).toString('hex');
     const test = new MultiDeskTest({
       templateIds,
@@ -35,7 +46,7 @@ router.post('/multi', auth, async (req, res) => {
 });
 
 // Admin: get all multi-desk tests (platform-scoped)
-router.get('/multi', auth, async (req, res) => {
+router.get('/multi', deskEditorAuth, async (req, res) => {
   try {
     const query = buildBaseFilter(req.user, 'targetCity');
     const tests = await MultiDeskTest.find(query).populate('templateIds').sort({ createdAt: -1 });
@@ -55,58 +66,14 @@ router.get('/multi/:hash', async (req, res) => {
     if (test.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
 
     const response = test.toObject();
-    response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
+    const bindingCity = getBindingCity(test.targetCity);
+    response.city = bindingCity || (test.ownerId ? test.ownerId.city : '');
+    response.cityBindingEnabled = Boolean(bindingCity);
+    response.cityBindingTarget = bindingCity;
 
     // Strip scoring coordinates from the public payload, but keep an exact inventory snapshot.
     if (response.templateIds) {
-      response.templateIds = response.templateIds.map((template) => {
-        const templateObject = typeof template.toObject === 'function' ? template.toObject() : template;
-
-        if (!templateObject.items) {
-          return templateObject;
-        }
-
-        return {
-          ...templateObject,
-          underlays: templateObject.underlays || [],
-          allowedItems: templateObject.items.map((item, index) => ({
-            id: item.id || `${item.type}-${index}`,
-            type: item.type,
-            name: item.name,
-            icon: item.icon,
-            width: item.width,
-            height: item.height,
-            rotation: item.rotation || 0,
-            zIndex: item.zIndex || 0,
-          })),
-          templateSnapshot: {
-            deskSurfacePreset: templateObject.deskSurfacePreset || 'walnut',
-            deskSurfaceColor: templateObject.deskSurfaceColor || '#ffffff',
-            underlays: (templateObject.underlays || []).map((underlay) => ({
-              id: underlay.id,
-              name: underlay.name,
-              image: underlay.image,
-              x: underlay.x,
-              y: underlay.y,
-              width: underlay.width,
-              height: underlay.height,
-              rotation: underlay.rotation || 0,
-              zIndex: underlay.zIndex ?? -10,
-            })),
-            items: templateObject.items.map((item) => ({
-              id: item.id,
-              type: item.type,
-              name: item.name,
-              icon: item.icon,
-              width: item.width,
-              height: item.height,
-              rotation: item.rotation || 0,
-              zIndex: item.zIndex || 0,
-            })),
-          },
-          items: undefined,
-        };
-      });
+      response.templateIds = response.templateIds.map((template) => buildPublicDeskTemplate(template));
     }
 
     // Трекінг відвідування
@@ -159,8 +126,7 @@ router.post('/multi/:hash/submit', async (req, res) => {
     if (!test) return res.status(404).json({ error: 'Тест не знайдено' });
     if (test.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
 
-    test.isUsed = true;
-    await test.save();
+    assertCityBinding(getBindingCity(test.targetCity), studentCity, 'посилання');
 
     const stepResults = [];
 
@@ -189,9 +155,12 @@ router.post('/multi/:hash/submit', async (req, res) => {
       await syncStudent(studentName, studentLastName, studentCity, req.app.get('io'), result);
     }
 
+    test.isUsed = true;
+    await test.save();
+
     res.status(201).json({ stepResults });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -209,46 +178,14 @@ router.get('/:hash', async (req, res) => {
     if (test.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
 
     const response = test.toObject();
-    response.city = test.targetCity || (test.ownerId ? test.ownerId.city : '');
+    const bindingCity = getBindingCity(test.targetCity, test.city);
+    response.city = bindingCity || (test.ownerId ? test.ownerId.city : '');
+    response.cityBindingEnabled = Boolean(bindingCity);
+    response.cityBindingTarget = bindingCity;
 
     // Strip template items (correct positions) — scoring is server-side
     if (response.templateId && response.templateId.items) {
-      response.templateId.allowedItems = response.templateId.items.map((item, index) => ({
-        id: item.id || `${item.type}-${index}`,
-        type: item.type,
-        name: item.name,
-        icon: item.icon,
-        width: item.width,
-        height: item.height,
-        rotation: item.rotation || 0,
-        zIndex: item.zIndex || 0,
-      }));
-      response.templateId.templateSnapshot = {
-        deskSurfacePreset: response.templateId.deskSurfacePreset || 'walnut',
-        deskSurfaceColor: response.templateId.deskSurfaceColor || '#ffffff',
-        underlays: (response.templateId.underlays || []).map((underlay) => ({
-          id: underlay.id,
-          name: underlay.name,
-          image: underlay.image,
-          x: underlay.x,
-          y: underlay.y,
-          width: underlay.width,
-          height: underlay.height,
-          rotation: underlay.rotation || 0,
-          zIndex: underlay.zIndex ?? -10,
-        })),
-        items: response.templateId.items.map((item) => ({
-          id: item.id,
-          type: item.type,
-          name: item.name,
-          icon: item.icon,
-          width: item.width,
-          height: item.height,
-          rotation: item.rotation || 0,
-          zIndex: item.zIndex || 0,
-        })),
-      };
-      delete response.templateId.items;
+      response.templateId = buildPublicDeskTemplate(response.templateId);
     }
 
     // Трекінг відвідування
@@ -290,8 +227,7 @@ router.post('/:hash/submit', async (req, res) => {
     }
     if (test.isUsed) return res.status(410).json({ error: 'Цей тест уже пройдено' });
 
-    test.isUsed = true;
-    await test.save();
+    assertCityBinding(getBindingCity(test.targetCity, test.city), studentCity, 'посилання');
 
     const targetItems = test.templateId.items;
     const {
@@ -324,22 +260,28 @@ router.post('/:hash/submit', async (req, res) => {
     // Sync student stats and emit real-time event
     await syncStudent(studentName, studentLastName, studentCity, req.app.get('io'), result);
 
+    test.isUsed = true;
+    await test.save();
+
     res.status(201).json({ score, total, percentage, passed, validatedItems, ghostItems, semanticFeedback });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
 // ── Захищені (адмін) ──────────────────────────────────────────────────────────
 
-router.post('/', auth, async (req, res) => {
+router.post('/', deskEditorAuth, async (req, res) => {
   const { templateId, templateName } = req.body;
   if (!templateId) {
     return res.status(400).json({ error: 'templateId є обов\'язковим' });
   }
   try {
     const hash = crypto.randomBytes(16).toString('hex');
-    const template = await DeskTemplate.findById(templateId);
+    const template = await DeskTemplate.findOne(buildOwnerQuery(req.user, templateId));
+    if (!template) {
+      return res.status(403).json({ error: 'РЁР°Р±Р»РѕРЅ РЅРµ Р·РЅР°Р№РґРµРЅРѕ Р°Р±Рѕ РЅРµРјР°С” РґРѕСЃС‚СѓРїСѓ' });
+    }
     const test = new DeskTest({
       templateId,
       templateName: templateName || 'Шаблон',
@@ -356,7 +298,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-router.get('/', auth, async (req, res) => {
+router.get('/', deskEditorAuth, async (req, res) => {
   try {
     const query = buildBaseFilter(req.user, 'targetCity');
     const tests = await DeskTest.find(query).populate('templateId').sort({ createdAt: -1 });

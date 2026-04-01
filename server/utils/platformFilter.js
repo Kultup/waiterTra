@@ -1,7 +1,7 @@
 /**
  * Platform-based data isolation utility.
  *
- * Users with platform = '' are global superadmins and see ALL data.
+ * Users with platform = '' are global superadmins and see all data.
  * Users with platform = 'funadmin' (or any non-empty value) are isolated
  * to content owned by users on the same platform.
  *
@@ -11,31 +11,26 @@
 const User = require('../models/User');
 
 /**
- * Build a base MongoDB filter that scopes queries to the user's platform + role.
+ * Build a base MongoDB filter that scopes resource queries to the user's
+ * own documents within their platform.
  *
- * @param {Object} user - req.user (must have _id, role, city, platform)
- * @param {string} [cityField='studentCity'] - name of the city field on the collection
+ * @param {Object} user - req.user (must have _id, role, platform)
  * @returns {Object} MongoDB query filter
  */
-function buildBaseFilter(user, cityField = 'studentCity') {
-  // Global superadmin (platform '') sees everything
+function buildBaseFilter(user) {
   if (user.role === 'superadmin' && !user.platform) {
     return {};
   }
 
-  // Platform superadmin — sees all content from their platform's users
   if (user.role === 'superadmin' && user.platform) {
     return { platform: user.platform };
   }
 
-  // Non-superadmin — sees own content + city-targeted content, scoped to platform
-  const orConditions = [{ ownerId: user._id }];
-  if (user.city) orConditions.push({ [cityField]: user.city });
-
-  const filter = { $or: orConditions };
+  const filter = { ownerId: user._id };
   if (user.platform) {
     filter.platform = user.platform;
   }
+
   return filter;
 }
 
@@ -48,14 +43,16 @@ function buildBaseFilter(user, cityField = 'studentCity') {
  */
 function buildOwnerQuery(user, id) {
   const query = { _id: id };
-  // Global superadmin — no restrictions
-  if (user.role === 'superadmin' && !user.platform) return query;
-  // Platform superadmin — restrict to platform
+
+  if (user.role === 'superadmin' && !user.platform) {
+    return query;
+  }
+
   if (user.role === 'superadmin' && user.platform) {
     query.platform = user.platform;
     return query;
   }
-  // Others — must own the document
+
   query.ownerId = user._id;
   return query;
 }
@@ -68,54 +65,72 @@ function buildOwnerQuery(user, id) {
  * @returns {Object} MongoDB query filter
  */
 function platformModelFilter(platform) {
-  if (!platform) return {}; // global sees all
+  if (!platform) {
+    return {};
+  }
+
   return { platform };
 }
 
-/**
- * Cache of platform user IDs (platform → Set of _id strings).
- * Refreshed on demand with a short TTL.
- */
 let _platformUsersCache = {};
 let _cacheTime = 0;
-const CACHE_TTL = 60_000; // 1 minute
+const CACHE_TTL = 60_000;
 
 async function getPlatformUserIds(platform) {
-  if (!platform) return null; // global — no restriction
+  if (!platform) {
+    return null;
+  }
+
   const now = Date.now();
   if (now - _cacheTime > CACHE_TTL) {
     _platformUsersCache = {};
     _cacheTime = now;
   }
+
   if (!_platformUsersCache[platform]) {
     const users = await User.find({ platform }, '_id').lean();
-    _platformUsersCache[platform] = users.map(u => u._id);
+    _platformUsersCache[platform] = users.map((user) => user._id);
   }
+
   return _platformUsersCache[platform];
 }
 
 /**
  * Build a filter for result models that have ownerId but no platform field.
- * For platform users, restricts to ownerIds belonging to the same platform.
+ * Admins/trainers see only their own results. Viewers/localadmins see only
+ * results for their assigned city.
  *
  * @param {Object} user - req.user
  * @param {string} [cityField='studentCity']
  * @returns {Promise<Object>} MongoDB query filter
  */
 async function buildResultFilter(user, cityField = 'studentCity') {
-  // Global superadmin
-  if (user.role === 'superadmin' && !user.platform) return {};
+  if (user.role === 'superadmin' && !user.platform) {
+    return {};
+  }
 
-  // Platform superadmin — restrict to results owned by platform users
   if (user.role === 'superadmin' && user.platform) {
     const ids = await getPlatformUserIds(user.platform);
     return { ownerId: { $in: ids } };
   }
 
-  // Non-superadmin
-  const orConditions = [{ ownerId: user._id }];
-  if (user.city) orConditions.push({ [cityField]: user.city });
-  return { $or: orConditions };
+  if (['viewer', 'localadmin'].includes(user.role)) {
+    if (!user.city) {
+      return { _id: null };
+    }
+
+    if (!user.platform) {
+      return { [cityField]: user.city };
+    }
+
+    const ids = await getPlatformUserIds(user.platform);
+    return {
+      ownerId: { $in: ids },
+      [cityField]: user.city
+    };
+  }
+
+  return { ownerId: user._id };
 }
 
 module.exports = {

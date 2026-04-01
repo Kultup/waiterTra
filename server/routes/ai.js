@@ -10,6 +10,7 @@ const ComplexTestResult = require('../models/ComplexTestResult');
 const router = express.Router();
 
 let groqClient = null;
+
 function getGroq() {
     if (!groqClient && process.env.GROQ_API_KEY) {
         groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -17,18 +18,65 @@ function getGroq() {
     return groqClient;
 }
 
-// POST /api/ai/analyze
+function buildScopedFilter(baseFilter, dateFilter, cityField, city) {
+    const conditions = [];
+
+    if (dateFilter.completedAt) {
+        conditions.push({ completedAt: dateFilter.completedAt });
+    }
+
+    if (baseFilter && Object.keys(baseFilter).length > 0) {
+        conditions.push(baseFilter);
+    }
+
+    if (city) {
+        conditions.push({ [cityField]: city });
+    }
+
+    if (conditions.length === 0) return {};
+    if (conditions.length === 1) return conditions[0];
+    return { $and: conditions };
+}
+
+function isPassed(result) {
+    if (typeof result?.passed === 'boolean') return result.passed;
+    if (typeof result?.isWin === 'boolean') return result.isWin;
+    if (typeof result?.overallPassed === 'boolean') return result.overallPassed;
+    if (typeof result?.percentage === 'number') return result.percentage >= 80;
+    return false;
+}
+
+function successRate(passed, total) {
+    return total > 0 ? Math.round((passed / total) * 100) : 0;
+}
+
+function sortByRateAndCount(items, rateKey) {
+    return [...items].sort((left, right) =>
+        (right[rateKey] - left[rateKey]) || (right.count - left.count) || left.name.localeCompare(right.name)
+    );
+}
+
+function summarizeBuckets(bucketMap, rateKey) {
+    return sortByRateAndCount(
+        Object.entries(bucketMap).map(([name, data]) => ({
+            name,
+            count: data.count,
+            passed: data.passed,
+            failed: data.count - data.passed,
+            [rateKey]: successRate(data.passed, data.count)
+        })),
+        rateKey
+    );
+}
+
 router.post('/analyze', auth, async (req, res) => {
     if (!getGroq()) {
         return res.status(500).json({ error: 'GROQ_API_KEY не налаштовано' });
     }
 
     const { mode, city, days, tab } = req.body;
-    // mode: 'dashboard' | 'results'
-    // tab: 'desk' | 'game' | 'quiz' | 'complex' | 'all'
 
     try {
-        // Build date filter
         const dateFilter = {};
         if (days && days > 0) {
             const cutoff = new Date();
@@ -36,48 +84,42 @@ router.post('/analyze', auth, async (req, res) => {
             dateFilter.completedAt = { $gte: cutoff };
         }
 
-        // Build base filter (role + platform scoped)
-        const platformBase = await buildResultFilter(req.user, 'studentCity');
-        let baseFilter;
-        if (Object.keys(platformBase).length === 0) {
-            baseFilter = { ...dateFilter };
-        } else {
-            baseFilter = { $and: [dateFilter, platformBase] };
-        }
-        if (city) {
-            baseFilter = { ...baseFilter, $or: undefined };
-            baseFilter.$and = [
-                dateFilter,
-                { $or: [{ studentCity: city }, { city: city }, { playerCity: city }] }
-            ];
-        }
+        const [deskBaseFilter, gameBaseFilter, quizBaseFilter, complexBaseFilter] = await Promise.all([
+            buildResultFilter(req.user, 'studentCity'),
+            buildResultFilter(req.user, 'city'),
+            buildResultFilter(req.user, 'studentCity'),
+            buildResultFilter(req.user, 'studentCity')
+        ]);
 
-        // Fetch results based on tab
+        const deskFilter = buildScopedFilter(deskBaseFilter, dateFilter, 'studentCity', city);
+        const gameFilter = buildScopedFilter(gameBaseFilter, dateFilter, 'city', city);
+        const quizFilter = buildScopedFilter(quizBaseFilter, dateFilter, 'studentCity', city);
+        const complexFilter = buildScopedFilter(complexBaseFilter, dateFilter, 'studentCity', city);
+
         const fetchTypes = tab && tab !== 'all'
             ? [tab]
             : ['desk', 'game', 'quiz', 'complex'];
 
         const results = {};
         if (fetchTypes.includes('desk')) {
-            results.desk = await TestResult.find(baseFilter).sort({ completedAt: -1 }).limit(200).lean();
+            results.desk = await TestResult.find(deskFilter).sort({ completedAt: -1 }).limit(200).lean();
         }
         if (fetchTypes.includes('game')) {
-            const gameFilter = { ...baseFilter };
-            // GameResult uses 'city' not 'studentCity'
             results.game = await GameResult.find(gameFilter).sort({ completedAt: -1 }).limit(200).lean();
         }
         if (fetchTypes.includes('quiz')) {
-            results.quiz = await QuizResult.find(baseFilter).sort({ completedAt: -1 }).limit(200).lean();
+            results.quiz = await QuizResult.find(quizFilter).sort({ completedAt: -1 }).limit(200).lean();
         }
         if (fetchTypes.includes('complex')) {
-            results.complex = await ComplexTestResult.find(baseFilter).sort({ completedAt: -1 }).limit(200).lean();
+            results.complex = await ComplexTestResult.find(complexFilter).sort({ completedAt: -1 }).limit(200).lean();
         }
 
-        // Prepare summary for AI
         const summary = buildSummary(results);
 
         if (summary.totalResults === 0) {
-            return res.json({ analysis: 'Недостатньо даних для аналізу. Спробуйте розширити період або змінити фільтри.' });
+            return res.json({
+                analysis: 'Недостатньо даних для аналізу. Спробуйте розширити період або змінити фільтри.'
+            });
         }
 
         const prompt = buildPrompt(summary, mode, city, days);
@@ -86,13 +128,13 @@ router.post('/analyze', auth, async (req, res) => {
             messages: [
                 {
                     role: 'system',
-                    content: 'Ти — AI-аналітик навчальної платформи для персоналу ресторанів та готелів. Аналізуєш результати тестів, квізів та ігрових сценаріїв. Відповідай ТІЛЬКИ українською мовою. Будь конкретним, давай числа та відсотки. Форматуй відповідь з emoji та розділами.'
+                    content: 'Ти — сильний AI-аналітик навчальної платформи для персоналу ресторанів та готелів. Відповідай тільки українською мовою. Аналізуй лише ті дані, які явно передані в prompt, нічого не вигадуй і не приписуй причин без опори на цифри. Завжди спирайся на конкретні числа, відсотки, динаміку, вибірки та порівняння. Якщо даних недостатньо або вибірка замала, прямо скажи про це. Пиши по-діловому, стисло, практично і без води. Структуруй відповідь короткими розділами з emoji, не використовуй таблиці, не дублюй одні й ті самі висновки різними словами. Рекомендації мають бути конкретними, пріоритезованими і прив’язаними до проблемного модуля, міста, посади або сценарію.'
                 },
                 { role: 'user', content: prompt }
             ],
             model: 'llama-3.3-70b-versatile',
-            temperature: 0.4,
-            max_tokens: 2000,
+            temperature: 0.35,
+            max_tokens: 2000
         });
 
         const analysis = chatCompletion.choices[0]?.message?.content || 'Не вдалося отримати аналіз';
@@ -104,104 +146,135 @@ router.post('/analyze', auth, async (req, res) => {
 });
 
 function buildSummary(results) {
-    const summary = { totalResults: 0, byType: {}, byCityMap: {}, byPosition: {}, timeline: {} };
+    const summary = {
+        totalResults: 0,
+        byType: {},
+        byCityMap: {},
+        byPosition: {},
+        timeline: {},
+        strongestCities: [],
+        weakestCities: [],
+        strongestPositions: [],
+        weakestPositions: []
+    };
 
-    // Desk results
     if (results.desk?.length) {
         const items = results.desk;
         summary.totalResults += items.length;
-        const passed = items.filter(r => r.passed).length;
-        const avg = Math.round(items.reduce((s, r) => s + (r.percentage || 0), 0) / items.length);
+        const passed = items.filter((result) => result.passed).length;
+        const avg = Math.round(items.reduce((sum, result) => sum + (result.percentage || 0), 0) / items.length);
         summary.byType.desk = { count: items.length, passed, failed: items.length - passed, avg };
 
-        // Aggregate by template
         const byTemplate = {};
-        items.forEach(r => {
-            const key = r.templateName || 'Без назви';
+        items.forEach((result) => {
+            const key = result.templateName || 'Без назви';
             if (!byTemplate[key]) byTemplate[key] = { count: 0, passed: 0, totalPct: 0 };
-            byTemplate[key].count++;
-            if (r.passed) byTemplate[key].passed++;
-            byTemplate[key].totalPct += r.percentage || 0;
+            byTemplate[key].count += 1;
+            if (result.passed) byTemplate[key].passed += 1;
+            byTemplate[key].totalPct += result.percentage || 0;
         });
-        summary.byType.desk.byTemplate = Object.entries(byTemplate).map(([name, d]) => ({
-            name, count: d.count, passed: d.passed, avg: Math.round(d.totalPct / d.count)
-        }));
+
+        summary.byType.desk.byTemplate = Object.entries(byTemplate)
+            .map(([name, data]) => ({
+                name,
+                count: data.count,
+                passed: data.passed,
+                avg: Math.round(data.totalPct / data.count)
+            }))
+            .sort((left, right) => left.avg - right.avg || right.count - left.count);
 
         aggregateByCityAndPosition(items, summary, 'studentCity', 'studentPosition');
     }
 
-    // Game results
     if (results.game?.length) {
         const items = results.game;
         summary.totalResults += items.length;
-        const wins = items.filter(r => r.isWin).length;
-        summary.byType.game = { count: items.length, wins, losses: items.length - wins, winRate: Math.round(wins / items.length * 100) };
+        const wins = items.filter((result) => result.isWin).length;
+        summary.byType.game = {
+            count: items.length,
+            wins,
+            losses: items.length - wins,
+            winRate: successRate(wins, items.length)
+        };
 
         const byScenario = {};
-        items.forEach(r => {
-            const key = r.scenarioTitle || 'Без назви';
+        items.forEach((result) => {
+            const key = result.scenarioTitle || 'Без назви';
             if (!byScenario[key]) byScenario[key] = { count: 0, wins: 0 };
-            byScenario[key].count++;
-            if (r.isWin) byScenario[key].wins++;
+            byScenario[key].count += 1;
+            if (result.isWin) byScenario[key].wins += 1;
         });
-        summary.byType.game.byScenario = Object.entries(byScenario).map(([name, d]) => ({
-            name, count: d.count, wins: d.wins, winRate: Math.round(d.wins / d.count * 100)
-        }));
 
-        aggregateByCityAndPosition(items, summary, 'playerCity', 'playerPosition', 'city');
+        summary.byType.game.byScenario = Object.entries(byScenario)
+            .map(([name, data]) => ({
+                name,
+                count: data.count,
+                wins: data.wins,
+                winRate: successRate(data.wins, data.count)
+            }))
+            .sort((left, right) => left.winRate - right.winRate || right.count - left.count);
+
+        aggregateByCityAndPosition(items, summary, 'city', 'position', 'playerCity', 'playerPosition');
     }
 
-    // Quiz results
     if (results.quiz?.length) {
         const items = results.quiz;
         summary.totalResults += items.length;
-        const passed = items.filter(r => r.percentage >= 80).length;
-        const avg = Math.round(items.reduce((s, r) => s + (r.percentage || 0), 0) / items.length);
+        const passed = items.filter((result) => result.percentage >= 80).length;
+        const avg = Math.round(items.reduce((sum, result) => sum + (result.percentage || 0), 0) / items.length);
         summary.byType.quiz = { count: items.length, passed, failed: items.length - passed, avg };
 
         aggregateByCityAndPosition(items, summary, 'studentCity', 'studentPosition');
     }
 
-    // Complex results
     if (results.complex?.length) {
         const items = results.complex;
         summary.totalResults += items.length;
-        const passed = items.filter(r => r.overallPassed).length;
+        const passed = items.filter((result) => result.overallPassed).length;
         summary.byType.complex = { count: items.length, passed, failed: items.length - passed };
 
         aggregateByCityAndPosition(items, summary, 'studentCity', 'studentPosition');
     }
 
-    // Build timeline
     const allItems = [
-        ...(results.desk || []).map(r => ({ date: r.completedAt, passed: r.passed })),
-        ...(results.game || []).map(r => ({ date: r.completedAt, passed: r.isWin })),
-        ...(results.quiz || []).map(r => ({ date: r.completedAt, passed: r.percentage >= 80 })),
-        ...(results.complex || []).map(r => ({ date: r.completedAt, passed: r.overallPassed })),
+        ...(results.desk || []).map((result) => ({ date: result.completedAt, passed: result.passed })),
+        ...(results.game || []).map((result) => ({ date: result.completedAt, passed: result.isWin })),
+        ...(results.quiz || []).map((result) => ({ date: result.completedAt, passed: result.percentage >= 80 })),
+        ...(results.complex || []).map((result) => ({ date: result.completedAt, passed: result.overallPassed }))
     ];
-    allItems.forEach(r => {
-        const day = new Date(r.date).toISOString().split('T')[0];
+
+    allItems.forEach((result) => {
+        const day = new Date(result.date).toISOString().split('T')[0];
         if (!summary.timeline[day]) summary.timeline[day] = { passed: 0, failed: 0 };
-        if (r.passed) summary.timeline[day].passed++;
-        else summary.timeline[day].failed++;
+        if (result.passed) summary.timeline[day].passed += 1;
+        else summary.timeline[day].failed += 1;
     });
+
+    const cityStats = summarizeBuckets(summary.byCityMap, 'successRate');
+    const positionStats = summarizeBuckets(summary.byPosition, 'successRate');
+    summary.strongestCities = cityStats.filter((entry) => entry.count >= 2).slice(0, 3);
+    summary.weakestCities = [...cityStats].reverse().filter((entry) => entry.count >= 2).slice(0, 3);
+    summary.strongestPositions = positionStats.filter((entry) => entry.count >= 2).slice(0, 3);
+    summary.weakestPositions = [...positionStats].reverse().filter((entry) => entry.count >= 2).slice(0, 3);
 
     return summary;
 }
 
-function aggregateByCityAndPosition(items, summary, cityField, posField, altCityField) {
-    items.forEach(r => {
-        const city = r[cityField] || (altCityField && r[altCityField]) || 'Невідомо';
-        const pos = r[posField] || 'Невідомо';
+function aggregateByCityAndPosition(items, summary, cityField, posField, altCityField, altPosField) {
+    items.forEach((result) => {
+        const city = result[cityField] || (altCityField && result[altCityField]) || 'Невідомо';
+        const position = result[posField] || (altPosField && result[altPosField]) || 'Невідомо';
+
         if (!summary.byCityMap[city]) summary.byCityMap[city] = { count: 0, passed: 0 };
-        summary.byCityMap[city].count++;
-        if (r.passed || r.isWin || (r.percentage && r.percentage >= 80) || r.overallPassed) {
-            summary.byCityMap[city].passed++;
+        summary.byCityMap[city].count += 1;
+        if (isPassed(result)) {
+            summary.byCityMap[city].passed += 1;
         }
-        if (!summary.byPosition[pos]) summary.byPosition[pos] = { count: 0, passed: 0 };
-        summary.byPosition[pos].count++;
-        if (r.passed || r.isWin || (r.percentage && r.percentage >= 80) || r.overallPassed) {
-            summary.byPosition[pos].passed++;
+
+        if (!summary.byPosition[position]) summary.byPosition[position] = { count: 0, passed: 0 };
+        summary.byPosition[position].count += 1;
+        if (isPassed(result)) {
+            summary.byPosition[position].passed += 1;
         }
     });
 }
@@ -214,63 +287,96 @@ function buildPrompt(summary, mode, city, days) {
     prompt += `ЗАГАЛОМ: ${summary.totalResults} результатів.\n\n`;
 
     if (summary.byType.desk) {
-        const d = summary.byType.desk;
-        prompt += `СЕРВІРУВАННЯ СТОЛУ: ${d.count} тестів, ${d.passed} здали (${d.avg}% середній).\n`;
-        if (d.byTemplate?.length) {
+        const desk = summary.byType.desk;
+        prompt += `СЕРВІРУВАННЯ СТОЛУ: ${desk.count} тестів, ${desk.passed} успішно, середній результат ${desk.avg}%.\n`;
+        if (desk.byTemplate?.length) {
             prompt += `  По шаблонах:\n`;
-            d.byTemplate.forEach(t => {
-                prompt += `  - "${t.name}": ${t.count} спроб, ${t.passed} здали, середній ${t.avg}%\n`;
+            desk.byTemplate.forEach((template) => {
+                prompt += `  - "${template.name}": ${template.count} спроб, ${template.passed} успішно, середній ${template.avg}%\n`;
             });
         }
         prompt += '\n';
     }
 
     if (summary.byType.game) {
-        const g = summary.byType.game;
-        prompt += `ІГРОВІ СЦЕНАРІЇ: ${g.count} проходжень, ${g.wins} перемог (${g.winRate}%).\n`;
-        if (g.byScenario?.length) {
+        const game = summary.byType.game;
+        prompt += `ІГРОВІ СЦЕНАРІЇ: ${game.count} проходжень, ${game.wins} перемог (${game.winRate}%).\n`;
+        if (game.byScenario?.length) {
             prompt += `  По сценаріях:\n`;
-            g.byScenario.forEach(s => {
-                prompt += `  - "${s.name}": ${s.count} спроб, ${s.wins} перемог (${s.winRate}%)\n`;
+            game.byScenario.forEach((scenario) => {
+                prompt += `  - "${scenario.name}": ${scenario.count} спроб, ${scenario.wins} перемог (${scenario.winRate}%)\n`;
             });
         }
         prompt += '\n';
     }
 
     if (summary.byType.quiz) {
-        const q = summary.byType.quiz;
-        prompt += `КВІЗИ: ${q.count} тестів, ${q.passed} здали (${q.avg}% середній).\n\n`;
+        const quiz = summary.byType.quiz;
+        prompt += `КВІЗИ: ${quiz.count} тестів, ${quiz.passed} успішно, середній результат ${quiz.avg}%.\n\n`;
     }
 
     if (summary.byType.complex) {
-        const c = summary.byType.complex;
-        prompt += `КОМПЛЕКСНІ ТЕСТИ: ${c.count} проходжень, ${c.passed} здали.\n\n`;
+        const complex = summary.byType.complex;
+        prompt += `КОМПЛЕКСНІ ТЕСТИ: ${complex.count} проходжень, ${complex.passed} успішно.\n\n`;
     }
 
-    // Cities
-    const citiesArr = Object.entries(summary.byCityMap);
-    if (citiesArr.length > 0) {
+    const cities = Object.entries(summary.byCityMap);
+    if (cities.length > 0) {
         prompt += `ПО МІСТАХ:\n`;
-        citiesArr.forEach(([name, data]) => {
-            const rate = Math.round(data.passed / data.count * 100);
-            prompt += `  - ${name}: ${data.count} тестів, ${rate}% успішність\n`;
+        cities.forEach(([name, data]) => {
+            prompt += `  - ${name}: ${data.count} тестів, ${successRate(data.passed, data.count)}% успішність\n`;
         });
         prompt += '\n';
     }
 
-    // Positions
-    const posArr = Object.entries(summary.byPosition);
-    if (posArr.length > 0) {
+    if (summary.strongestCities.length > 0 || summary.weakestCities.length > 0) {
+        prompt += `ЛІДЕРИ ТА РИЗИКИ ПО МІСТАХ:\n`;
+        summary.strongestCities.forEach((entry) => {
+            prompt += `  + Сильне місто: ${entry.name} — ${entry.successRate}% успішності (${entry.count} спроб)\n`;
+        });
+        summary.weakestCities.forEach((entry) => {
+            prompt += `  - Слабке місто: ${entry.name} — ${entry.successRate}% успішності (${entry.count} спроб)\n`;
+        });
+        prompt += '\n';
+    }
+
+    const positions = Object.entries(summary.byPosition);
+    if (positions.length > 0) {
         prompt += `ПО ПОСАДАХ:\n`;
-        posArr.forEach(([name, data]) => {
-            const rate = Math.round(data.passed / data.count * 100);
-            prompt += `  - ${name}: ${data.count} тестів, ${rate}% успішність\n`;
+        positions.forEach(([name, data]) => {
+            prompt += `  - ${name}: ${data.count} тестів, ${successRate(data.passed, data.count)}% успішність\n`;
         });
         prompt += '\n';
     }
 
-    // Timeline
-    const timeline = Object.entries(summary.timeline).sort(([a], [b]) => a.localeCompare(b));
+    if (summary.strongestPositions.length > 0 || summary.weakestPositions.length > 0) {
+        prompt += `ЛІДЕРИ ТА РИЗИКИ ПО ПОСАДАХ:\n`;
+        summary.strongestPositions.forEach((entry) => {
+            prompt += `  + Сильна посада: ${entry.name} — ${entry.successRate}% успішності (${entry.count} спроб)\n`;
+        });
+        summary.weakestPositions.forEach((entry) => {
+            prompt += `  - Слабка посада: ${entry.name} — ${entry.successRate}% успішності (${entry.count} спроб)\n`;
+        });
+        prompt += '\n';
+    }
+
+    if (summary.byType.desk?.byTemplate?.length) {
+        prompt += `НАЙСЛАБШІ ШАБЛОНИ СЕРВІРУВАННЯ:\n`;
+        summary.byType.desk.byTemplate.slice(0, 3).forEach((template) => {
+            prompt += `  - ${template.name}: ${template.avg}% середній результат (${template.count} спроб)\n`;
+        });
+        prompt += '\n';
+    }
+
+    if (summary.byType.game?.byScenario?.length) {
+        prompt += `НАЙСЛАБШІ ІГРОВІ СЦЕНАРІЇ:\n`;
+        summary.byType.game.byScenario.slice(0, 3).forEach((scenario) => {
+            prompt += `  - ${scenario.name}: ${scenario.winRate}% перемог (${scenario.count} спроб)\n`;
+        });
+        prompt += '\n';
+    }
+
+    const timeline = Object.entries(summary.timeline).sort(([left], [right]) => left.localeCompare(right));
     if (timeline.length > 1) {
         prompt += `ДИНАМІКА (останні дні):\n`;
         timeline.slice(-10).forEach(([day, data]) => {
@@ -279,23 +385,42 @@ function buildPrompt(summary, mode, city, days) {
         prompt += '\n';
     }
 
+    prompt += `ПРАВИЛА ВІДПОВІДІ:
+- Відповідай тільки українською.
+- Не вигадуй причин, якщо вони не випливають із даних.
+- У кожному важливому висновку посилайся на числа, відсотки або порівняння.
+- Якщо вибірка мала (1-2 спроби), називай це слабким сигналом, а не твердим висновком.
+- Не просто описуй дані, а пояснюй, що це означає для навчання команди.
+- Рекомендації формулюй як конкретні дії, а не загальні побажання.
+- Не використовуй таблиці.
+- Уникай довгих абзаців: краще короткі блоки або маркери.
+- У фіналі дай чіткий список пріоритетів, що робити далі.
+
+ФОРМАТ ВІДПОВІДІ:
+- Кожен розділ починай з emoji та короткого заголовка.
+- У кожному розділі 2-4 змістовні пункти або короткі абзаци.
+- Завершуй відповідь блоком "Пріоритети на найближчий період".
+`;
+
     if (mode === 'dashboard') {
-        prompt += `\nДай загальний огляд стану навчання. Визнач:
-1. 📊 Загальна оцінка (коротко, 1-2 речення)
-2. 💪 Сильні сторони (що добре)
-3. ⚠️ Слабкі місця (де проблеми)
-4. 📈 Тренди (покращення чи погіршення)
-5. 🎯 Рекомендації для тренерів (3-5 конкретних дій)
-6. 🏆 Топ-місто / найгірше місто (якщо є дані по містах)`;
+        prompt += `Дай короткий управлінський огляд для керівника. Обов'язково включи:
+1. 📊 Загальну оцінку стану навчання.
+2. 💪 Сильні сторони.
+3. ⚠️ Слабкі місця.
+4. 📈 Головні тренди.
+5. 🎯 3-5 конкретних дій для тренерів.
+ 6. 🏙️ Які міста та посади зараз найсильніші і найризиковіші.
+ 7. ✅ Наприкінці дай 3 пріоритети на найближчі 7 днів.`;
     } else {
-        prompt += `\nДай детальний аналіз результатів. Визнач:
-1. 📊 Загальна картина
-2. ⚠️ Проблемні зони (конкретні тести/шаблони з низькими результатами)
-3. 🏙️ Порівняння міст (якщо є)
-4. 👤 Аналіз по посадах
-5. 📈 Тренд успішності
-6. 🎯 Що конкретно треба покращити (по кожному типу тестів)
-7. 💡 Рекомендації для організації навчання`;
+        prompt += `Дай детальний аналітичний висновок для тренера або адміністратора. Обов'язково включи:
+1. 📊 Загальну картину.
+2. ⚠️ Проблемні зони по типах тестів.
+3. 🧩 Найслабші шаблони чи сценарії.
+4. 🏙️ Порівняння міст.
+5. 👤 Порівняння посад.
+6. 📈 Що покращується, а що просідає.
+ 7. 💡 Практичні рекомендації для організації навчання.
+ 8. ✅ Наприкінці дай 5 пріоритетних дій у порядку важливості.`;
     }
 
     return prompt;

@@ -12,12 +12,11 @@ const StudentManager = () => {
     const [error, setError] = useState(null);
     const navigate = useNavigate();
 
-    const token = localStorage.getItem('token');
-    const config = { headers: { Authorization: `Bearer ${token}` } };
-
     useEffect(() => {
         const fetchStudents = async () => {
             try {
+                const token = localStorage.getItem('token');
+                const config = { headers: { Authorization: `Bearer ${token}` } };
                 const res = await axios.get(`${API_URL}/students`, config);
                 console.log('Fetched students:', res.data);
                 setStudents(res.data);

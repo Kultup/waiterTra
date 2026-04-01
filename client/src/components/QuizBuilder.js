@@ -4,7 +4,42 @@ import axios from 'axios';
 import API_URL, { getUserPlatform } from '../api';
 import { useToast } from '../contexts/ToastContext';
 import ConfirmModal from './ConfirmModal';
+import { copyText } from '../utils/clipboard';
 import './QuizBuilder.css';
+
+const createEmptyQuestion = () => ({
+    text: '',
+    options: ['', '', '', ''],
+    correctIndex: 0,
+    image: '',
+    video: '',
+    explanation: ''
+});
+
+const getQuizCity = (quiz) => quiz?.city || quiz?.targetCity || '';
+
+const cloneQuestion = (question = {}) => ({
+    text: question.text || '',
+    options: Array.isArray(question.options) && question.options.length > 0
+        ? [...question.options]
+        : ['', '', '', ''],
+    correctIndex: Number.isInteger(question.correctIndex) ? question.correctIndex : 0,
+    image: question.image || '',
+    video: question.video || '',
+    explanation: question.explanation || ''
+});
+
+const cloneQuizForEditing = (quiz = {}) => ({
+    ...quiz,
+    title: quiz.title || '',
+    description: quiz.description || '',
+    timeLimit: Number.isFinite(Number(quiz.timeLimit)) ? Number(quiz.timeLimit) : 0,
+    passingScore: Number.isFinite(Number(quiz.passingScore)) ? Number(quiz.passingScore) : 80,
+    city: getQuizCity(quiz),
+    questions: Array.isArray(quiz.questions) && quiz.questions.length > 0
+        ? quiz.questions.map(cloneQuestion)
+        : [createEmptyQuestion()]
+});
 
 const QuizBuilder = () => {
     const toast = useToast();
@@ -40,7 +75,10 @@ const QuizBuilder = () => {
             const res = await axios.get(`${API_URL}/quiz`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setQuizzes(res.data);
+            setQuizzes((res.data || []).map((quiz) => ({
+                ...quiz,
+                city: getQuizCity(quiz)
+            })));
         } catch (err) {
             console.error('fetchQuizzes:', err);
         }
@@ -54,21 +92,20 @@ const QuizBuilder = () => {
     };
 
     const handleNewQuiz = () => {
-        setEditing({
+        setEditing(cloneQuizForEditing({
             title: '',
             description: '',
             timeLimit: 0,
             passingScore: 80,
-            targetCity: '',
-            questions: [{ text: '', options: ['', '', '', ''], correctIndex: 0, image: '', video: '', explanation: '' }]
-        });
+            city: '',
+            questions: [createEmptyQuestion()]
+        }));
         setCollapsedQuestions(new Set());
     };
 
     const addQuestion = () => {
-        const newQs = [...editing.questions, { text: '', options: ['', '', '', ''], correctIndex: 0, image: '', video: '', explanation: '' }];
-        setEditing({ ...editing, questions: newQs });
-        // New question is expanded
+        const newQs = [...editing.questions, createEmptyQuestion()];
+        setEditing((prev) => ({ ...prev, questions: newQs }));
         const newCollapsed = new Set(collapsedQuestions);
         newCollapsed.delete(newQs.length - 1);
         setCollapsedQuestions(newCollapsed);
@@ -79,18 +116,6 @@ const QuizBuilder = () => {
         setEditing({ ...editing, questions: newQs });
     };
 
-    const isQuestionComplete = (q) => {
-        return q.text.trim() !== '' && q.options.every(opt => opt.trim() !== '');
-    };
-
-    const checkAutoCollapse = (index, question) => {
-        if (isQuestionComplete(question)) {
-            const newCollapsed = new Set(collapsedQuestions);
-            newCollapsed.add(index);
-            setCollapsedQuestions(newCollapsed);
-        }
-    };
-
     const toggleCollapse = (index) => {
         const newCollapsed = new Set(collapsedQuestions);
         if (newCollapsed.has(index)) newCollapsed.delete(index);
@@ -99,30 +124,55 @@ const QuizBuilder = () => {
     };
 
     const updateQuestion = (index, field, value) => {
-        const newQs = [...editing.questions];
-        newQs[index][field] = value;
-        setEditing({ ...editing, questions: newQs });
+        setEditing((prev) => ({
+            ...prev,
+            questions: prev.questions.map((question, questionIndex) => (
+                questionIndex === index ? { ...question, [field]: value } : question
+            ))
+        }));
     };
 
     const addOption = (qIdx) => {
-        const newQs = [...editing.questions];
-        newQs[qIdx].options.push('');
-        setEditing({ ...editing, questions: newQs });
+        setEditing((prev) => ({
+            ...prev,
+            questions: prev.questions.map((question, questionIndex) => (
+                questionIndex === qIdx
+                    ? { ...question, options: [...question.options, ''] }
+                    : question
+            ))
+        }));
     };
 
     const updateOption = (qIdx, oIdx, value) => {
-        const newQs = [...editing.questions];
-        newQs[qIdx].options[oIdx] = value;
-        setEditing({ ...editing, questions: newQs });
+        setEditing((prev) => ({
+            ...prev,
+            questions: prev.questions.map((question, questionIndex) => (
+                questionIndex === qIdx
+                    ? {
+                        ...question,
+                        options: question.options.map((option, optionIndex) => (
+                            optionIndex === oIdx ? value : option
+                        ))
+                    }
+                    : question
+            ))
+        }));
     };
 
     const removeOption = (qIdx, oIdx) => {
-        const newQs = [...editing.questions];
-        newQs[qIdx].options = newQs[qIdx].options.filter((_, i) => i !== oIdx);
-        if (newQs[qIdx].correctIndex >= newQs[qIdx].options.length) {
-            newQs[qIdx].correctIndex = 0;
-        }
-        setEditing({ ...editing, questions: newQs });
+        setEditing((prev) => ({
+            ...prev,
+            questions: prev.questions.map((question, questionIndex) => {
+                if (questionIndex !== qIdx) return question;
+
+                const nextOptions = question.options.filter((_, optionIndex) => optionIndex !== oIdx);
+                return {
+                    ...question,
+                    options: nextOptions,
+                    correctIndex: question.correctIndex >= nextOptions.length ? 0 : question.correctIndex
+                };
+            })
+        }));
     };
 
     const handleFileUpload = async (qIdx, field, file) => {
@@ -161,10 +211,14 @@ const QuizBuilder = () => {
             const token = localStorage.getItem('token');
             const config = { headers: { Authorization: `Bearer ${token}` } };
 
+            const { targetCity, ...editingWithoutLegacyCity } = editing;
             const payload = {
-                ...editing,
-                targetCity: user?.role === 'superadmin' ? editing.targetCity : undefined
+                ...editingWithoutLegacyCity,
+                city: user?.role === 'superadmin' ? getQuizCity(editing) : undefined
             };
+            if (user?.role !== 'superadmin') {
+                delete payload.city;
+            }
             if (editing._id) {
                 await axios.put(`${API_URL}/quiz/${editing._id}`, payload, config);
             } else {
@@ -251,7 +305,7 @@ const QuizBuilder = () => {
                     description: '',
                     timeLimit: 0,
                     passingScore: 80,
-                    targetCity: '',
+                    city: '',
                     questions
                 });
                 setCollapsedQuestions(new Set(questions.map((_, i) => i)));
@@ -271,12 +325,15 @@ const QuizBuilder = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const url = `${window.location.origin}/quiz/${res.data.hash}`;
-            await navigator.clipboard.writeText(url);
+            const copyMethod = await copyText(url);
             setCopyStatus(quizId);
             setTimeout(() => setCopyStatus(null), 2000);
+            if (copyMethod === 'prompt') {
+                toast.info('Посилання готове. Якщо браузер не скопіював його автоматично, скопіюйте вручну.');
+            }
         } catch (err) {
             console.error('handleCopyLink:', err);
-            alert('Помилка при створенні посилання');
+            toast.error('Помилка при створенні посилання');
         }
     };
 
@@ -297,8 +354,8 @@ const QuizBuilder = () => {
                                 <span style={{ color: '#888', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>📍 Місто:</span>
                                 <select
                                     className="qb-input"
-                                    value={editing.targetCity || ''}
-                                    onChange={e => setEditing({ ...editing, targetCity: e.target.value })}
+                                    value={editing.city || ''}
+                                    onChange={e => setEditing({ ...editing, city: e.target.value })}
                                 >
                                     <option value="">Всі міста</option>
                                     {cities.map(c => (
@@ -459,7 +516,7 @@ const QuizBuilder = () => {
     }
 
     const filteredQuizzes = quizzes.filter(q =>
-        !filterCity || q.targetCity === filterCity
+        !filterCity || getQuizCity(q) === filterCity
     );
 
     return (
@@ -506,7 +563,7 @@ const QuizBuilder = () => {
                             <div className="quiz-card-content">
                                 <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                     {quiz.title}
-                                    {quiz.targetCity && <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 'normal', whiteSpace: 'nowrap' }}>📍 {quiz.targetCity}</span>}
+                                    {getQuizCity(quiz) && <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 'normal', whiteSpace: 'nowrap' }}>📍 {getQuizCity(quiz)}</span>}
                                 </h3>
                                 <p>{quiz.description || 'Без опису'}</p>
                                 <div className="quiz-meta">
@@ -518,7 +575,7 @@ const QuizBuilder = () => {
                                 <button className="qb-btn qb-btn-secondary" onClick={() => handleCopyLink(quiz._id)}>
                                     {copyStatus === quiz._id ? '✓ Скопійовано' : '🔗 Посилання'}
                                 </button>
-                                <button className="qb-btn-icon" onClick={() => setEditing(quiz)} title="Редагувати">✏️</button>
+                                <button className="qb-btn-icon" onClick={() => setEditing(cloneQuizForEditing(quiz))} title="Редагувати">✏️</button>
                                 <button className="qb-btn-icon delete" onClick={() => setConfirmModal({ isOpen: true, idToDelete: quiz._id })} title="Видалити">🗑️</button>
                             </div>
                         </div>

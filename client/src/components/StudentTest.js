@@ -9,7 +9,6 @@ const StudentTest = () => {
     const { hash } = useParams();
     const navigate = useNavigate();
     const [testData, setTestData] = useState(null);
-    const [catalogDishes, setCatalogDishes] = useState([]);
     const [dishes, setDishes] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -25,13 +24,8 @@ const StudentTest = () => {
     useEffect(() => {
         const fetchInitialData = async () => {
             try {
-                const [citiesRes, dishesRes] = await Promise.all([
-                    axios.get(`${API_URL}/cities`),
-                    axios.get(`${API_URL}/dishes`)
-                ]);
+                const citiesRes = await axios.get(`${API_URL}/cities`);
                 setAvailableCities(citiesRes.data);
-                const mappedDishes = dishesRes.data.map(d => ({ ...d, id: d._id }));
-                setCatalogDishes(mappedDishes);
             } catch (error) {
                 console.error('Error fetching initial data:', error);
             }
@@ -43,17 +37,12 @@ const StudentTest = () => {
         if (!testData) return;
 
         const allowedItems = testData.templateId?.allowedItems || [];
-        if (allowedItems.length > 0) {
-            setDishes(allowedItems.map((item) => ({
-                ...item,
-                _id: item.id || item.type,
-                id: item.id || item.type,
-            })));
-            return;
-        }
-
-        setDishes(catalogDishes);
-    }, [testData, catalogDishes]);
+        setDishes(allowedItems.map((item) => ({
+            ...item,
+            _id: item.id || item.type,
+            id: item.id || item.type,
+        })));
+    }, [testData]);
 
     useEffect(() => {
         const fetchTest = async () => {

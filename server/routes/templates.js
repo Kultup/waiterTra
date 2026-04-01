@@ -1,13 +1,16 @@
 const express = require('express');
 const DeskTemplate = require('../models/DeskTemplate');
-const { auth } = require('../middleware/authMiddleware');
+const { auth, checkRole } = require('../middleware/authMiddleware');
 const { buildBaseFilter, buildOwnerQuery } = require('../utils/platformFilter');
+const { DESK_EDITOR_ROLES } = require('../utils/accessPolicy');
 const path = require('path');
 const fs = require('fs');
 const router = express.Router();
 
+const deskEditorAuth = [auth, checkRole(DESK_EDITOR_ROLES)];
+
 // Get all templates (platform-scoped)
-router.get('/', auth, async (req, res) => {
+router.get('/', deskEditorAuth, async (req, res) => {
   try {
     const query = buildBaseFilter(req.user, 'targetCity');
     const templates = await DeskTemplate.find(query).sort({ createdAt: -1 });
@@ -18,7 +21,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Create template
-router.post('/', auth, async (req, res) => {
+router.post('/', deskEditorAuth, async (req, res) => {
   const { name, items } = req.body;
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'Назва шаблону є обов\'язковою' });
@@ -39,7 +42,7 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', deskEditorAuth, async (req, res) => {
   const { name } = req.body;
   if (name !== undefined && (!name || typeof name !== 'string' || !name.trim())) {
     return res.status(400).json({ error: 'Назва шаблону не може бути порожньою' });
@@ -61,7 +64,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // Delete template
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', deskEditorAuth, async (req, res) => {
   try {
     const query = buildOwnerQuery(req.user, req.params.id);
     const template = await DeskTemplate.findOneAndDelete(query);

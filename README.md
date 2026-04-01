@@ -1,64 +1,124 @@
-# ServIQ — Платформа навчання персоналу
+# ServIQ
 
-Платформа для інтерактивного навчання та тестування персоналу у сфері гостинності. Включає конструктори сервірування, ігрових сценаріїв та квізів.
+Платформа для навчання і перевірки персоналу сфери гостинності. У проєкті є:
 
-## 🚀 Швидкий запуск
+- конструктор сервірування столу
+- візуальний редактор сценаріїв
+- конструктор квізів
+- комплексні тести
+- студентські публічні сторінки за `hash`-посиланнями
+- адмін-панель з ролями, результатами і статистикою
 
-### 1. Передумови
-- **Node.js** (v18+)
-- **MongoDB** (локально або MongoDB Atlas)
+## Стек
 
-### 2. Встановлення
-Виконайте команду в коріні проекту для встановлення всіх залежностей (корінь, сервер, клієнт):
+- `client/` — React 18 + React Router 7 + CRA
+- `server/` — Node.js + Express + Mongoose + Socket.IO
+- База даних — MongoDB
+
+## Швидкий старт
+
+### 1. Встановлення
+
 ```bash
 npm run install-all
 ```
 
-### 3. Налаштування середовища
-Створіть файл `server/.env` (якщо його немає) та налаштуйте змінні:
+### 2. Налаштування `server/.env`
+
 ```env
 MONGODB_URI=mongodb://localhost:27017/serviq
 PORT=5000
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123
 JWT_SECRET=your_secret_key
 JWT_EXPIRES_IN=8h
+GROQ_API_KEY=
 ```
 
-### 4. Запуск проекту
-Для запуску сервера та клієнта одночасно:
+### 3. Запуск
+
+Увесь стек:
+
 ```bash
 npm run dev
 ```
-- Клієнт: [http://localhost:3000](http://localhost:3000)
-- Сервер: [http://localhost:5000](http://localhost:5000)
 
----
+Окремо:
 
-## 🛠 Команди
+```bash
+npm run server
+npm run client
+```
 
-| Команда | Опис |
-|---------|------|
-| `npm run dev` | Запуск клієнта та сервера одночасно |
-| `npm run install-all` | Встановлення залежностей для всього проекту |
-| `npm run server` | Запуск лише сервера (з nodemon) |
-| `npm run client` | Запуск лише клієнта |
-| `npm run seed:game` | Завантаження базового ігрового сценарію |
+Frontend за замовчуванням працює на `http://localhost:3000`, backend — на `http://localhost:5000`.
 
----
+## Корисні команди
 
-## 🏗 Структура проекту
-- `/client` — React додаток (Frontend)
-- `/server` — Node.js / Express API (Backend)
-- `/server/models` — Схеми бази даних MongoDB
-- `/server/tests` — Автоматичні тести (Jest)
+```bash
+npm run build
+npm run seed:game
+npm run test:server
+npm run test:client
+```
 
-## 🧪 Тестування
-Для запуску тестів бекенду:
+## Ролі
+
+- `superadmin` — повний доступ
+- `admin` — свої шаблони, тести, редактори і результати
+- `trainer` — сценарії, квізи і перегляд результатів
+- `viewer` — лише результати
+- `localadmin` — лише аналітика трафіку
+
+## Основні маршрути
+
+Публічні:
+
+- `/test/:hash`
+- `/multi-test/:hash`
+- `/game/:hash`
+- `/quiz/:hash`
+- `/complex/:hash`
+
+Адмінські:
+
+- `/virtual-desk`
+- `/visual-builder`
+- `/quiz-builder`
+- `/complex-builder`
+- `/test-results`
+- `/students`
+- `/settings`
+- `/users`
+- `/cities`
+- `/analytics`
+
+## Backend-модулі
+
+- `server/routes/tests.js` — desk і multi-desk тести
+- `server/routes/game.js` — сценарії, посилання і результати гри
+- `server/routes/quiz.js` — квізи, посилання і результати
+- `server/routes/complexTest.js` — комплексні тести
+- `server/routes/templates.js` — шаблони сервірування
+- `server/routes/testResults.js` — результати сервірування
+- `server/routes/student.js` — профілі студентів
+- `server/routes/maintenance.js` — скидання результатів
+
+## Тестування
+
+Server suite:
+
 ```bash
 cd server
 npm test
 ```
 
----
-© 2026 ServIQ Team
+Client production build:
+
+```bash
+cd client
+npm run build
+```
+
+## Примітки
+
+- Публічні студентські сторінки не повинні залежати від авторизованих API.
+- Рольова і міська ізоляція реалізовані на бекенді, а не лише в UI.
+- Для першого запуску на порожній базі можна використати `POST /api/auth/register-root`.

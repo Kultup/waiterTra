@@ -6,6 +6,7 @@ const gameLinkSchema = new mongoose.Schema({
     hash: { type: String, required: true, unique: true },
     isActive: { type: Boolean, default: true },
     isUsed: { type: Boolean, default: false },
+    targetCity: { type: String, default: '' },
     createdAt: { type: Date, default: Date.now },
     expiresAt: { type: Date }
 });

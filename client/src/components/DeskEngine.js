@@ -31,7 +31,6 @@ const DeskEngine = ({
   const [availableDishes, setAvailableDishes] = useState([]);
   const [selectedDish, setSelectedDish] = useState(null);
   const [result, setResult] = useState(null);
-  const [ghostItems, setGhostItems] = useState([]);
   const [semanticFeedback, setSemanticFeedback] = useState(null);
   const [timeLeft, setTimeLeft] = useState(null);
   const handleCheckRef = useRef(null);
@@ -193,7 +192,6 @@ const DeskEngine = ({
       }));
 
       setItems(mergedItems);
-      setGhostItems(response.ghostItems || []);
       setSemanticFeedback(response.semanticFeedback || null);
 
       const nextResult = {
@@ -278,7 +276,7 @@ const DeskEngine = ({
           items={items}
           underlays={underlays}
           dishes={dishes}
-          ghostItems={result ? ghostItems : []}
+          ghostItems={[]}
           surfacePreset={deskSurfacePreset}
           surfaceColor={deskSurfaceColor}
           onDeskClick={handleDeskClick}

@@ -107,12 +107,11 @@ const StudentProfile = () => {
     const [loading, setLoading] = useState(true);
     const [selectedItem, setSelectedItem] = useState(null);
 
-    const token = localStorage.getItem('token');
-    const config = { headers: { Authorization: `Bearer ${token}` } };
-
     useEffect(() => {
         const fetchProfile = async () => {
             try {
+                const token = localStorage.getItem('token');
+                const config = { headers: { Authorization: `Bearer ${token}` } };
                 const res = await axios.get(`${API_URL}/students/${id}`, config);
                 setData(res.data);
             } catch (err) {
@@ -124,7 +123,7 @@ const StudentProfile = () => {
             }
         };
         fetchProfile();
-    }, [id]);
+    }, [id, navigate]);
 
     if (loading) return <div className="sp-loading">Вавантаження профілю...</div>;
     if (!data) return null;

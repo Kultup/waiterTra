@@ -19,7 +19,8 @@ const VideoPlayer = ({ url }) => {
     const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
     if (vimeoMatch && vimeoMatch[1]) {
         return (
-            <iframe src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
+            <iframe title="Vimeo video player"
+                src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
                 width="100%" height="100%" frameBorder="0"
                 allow="autoplay; fullscreen; picture-in-picture" allowFullScreen />
         );

@@ -1,19 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const Dish = require('../models/Dish');
-const { auth } = require('../middleware/authMiddleware');
+const { auth, checkRole } = require('../middleware/authMiddleware');
 const { platformModelFilter } = require('../utils/platformFilter');
+const { DESK_EDITOR_ROLES } = require('../utils/accessPolicy');
 const logger = require('../utils/logger');
-
-const adminAuth = (req, res, next) => {
-    if (!['admin', 'superadmin'].includes(req.user.role)) {
-        return res.status(403).json({ error: 'Access denied' });
-    }
-    next();
-};
+const deskEditorAuth = [auth, checkRole(DESK_EDITOR_ROLES)];
 
 // GET all dishes (platform-scoped)
-router.get('/', auth, async (req, res) => {
+router.get('/', deskEditorAuth, async (req, res) => {
     try {
         const filter = platformModelFilter(req.user.platform);
         const dishes = await Dish.find(filter).sort({ createdAt: -1 });
@@ -25,7 +20,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST new dish (Admin only, platform-scoped)
-router.post('/', [auth, adminAuth], async (req, res) => {
+router.post('/', deskEditorAuth, async (req, res) => {
     try {
         const { name, icon, rotation } = req.body;
         if (!name) {
@@ -51,7 +46,7 @@ router.post('/', [auth, adminAuth], async (req, res) => {
 });
 
 // PUT update dish (Admin only, platform-scoped)
-router.put('/:id', [auth, adminAuth], async (req, res) => {
+router.put('/:id', deskEditorAuth, async (req, res) => {
     try {
         const { name, icon, rotation } = req.body;
         if (rotation !== undefined && typeof rotation !== 'number') {
@@ -78,7 +73,7 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
 });
 
 // DELETE dish (Admin only, platform-scoped)
-router.delete('/:id', [auth, adminAuth], async (req, res) => {
+router.delete('/:id', deskEditorAuth, async (req, res) => {
     try {
         const filter = { _id: req.params.id };
         if (req.user.platform) filter.platform = req.user.platform;

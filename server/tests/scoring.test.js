@@ -57,6 +57,28 @@ describe('validateDeskPlacement', () => {
     expect(result.percentage).toBe(0);
   });
 
+  test('should return ghost items only for positions that are actually missing', () => {
+    const sizedTargetItems = [
+      { type: 'plate', x: 100, y: 100, name: 'Plate', icon: 'plate.png', width: 90, height: 90, rotation: 0 },
+      { type: 'fork', x: 50, y: 100, name: 'Fork', icon: 'fork.png', width: 70, height: 24, rotation: 90 }
+    ];
+    const userItems = [
+      { type: 'plate', x: 100, y: 100 }
+    ];
+
+    const result = validateDeskPlacement(userItems, sizedTargetItems);
+
+    expect(result.ghostItems).toHaveLength(1);
+    expect(result.ghostItems[0]).toMatchObject({
+      type: 'fork',
+      x: 50,
+      y: 100,
+      width: 70,
+      height: 24,
+      rotation: 90,
+    });
+  });
+
   test('should return semantic feedback when item is placed on the wrong side', () => {
     const userItems = [
       { type: 'plate', x: 100, y: 100, name: 'Plate' },

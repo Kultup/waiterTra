@@ -36,8 +36,14 @@ const DeskCanvas = ({
   const deskRef = useRef(null);
   const dragRef = useRef(null);
   const suppressClickRef = useRef(false);
+  const lastTransformAtRef = useRef(0);
   const [activeItemId, setActiveItemId] = useState(null);
   const [activeUnderlayId, setActiveUnderlayId] = useState(null);
+
+  const markTransformInteraction = () => {
+    suppressClickRef.current = true;
+    lastTransformAtRef.current = Date.now();
+  };
 
   useEffect(() => {
     const handlePointerMove = (event) => {
@@ -130,7 +136,7 @@ const DeskCanvas = ({
           : [dragRef.current.startPosition.x, dragRef.current.startPosition.y];
         return Math.abs(value - baseValues[index]) > 1;
       })) {
-        suppressClickRef.current = true;
+        markTransformInteraction();
       }
     };
 
@@ -138,6 +144,7 @@ const DeskCanvas = ({
       if (!dragRef.current) return;
 
       const { itemId, underlayId, lastUpdates, kind } = dragRef.current;
+      markTransformInteraction();
       dragRef.current = null;
       setActiveItemId(null);
       setActiveUnderlayId(null);
@@ -152,7 +159,7 @@ const DeskCanvas = ({
 
       window.setTimeout(() => {
         suppressClickRef.current = false;
-      }, 0);
+      }, 180);
     };
 
     window.addEventListener('pointermove', handlePointerMove);
@@ -165,7 +172,7 @@ const DeskCanvas = ({
   }, [onItemCommit, onItemPreview, onUnderlayCommit, onUnderlayPreview]);
 
   const handleDeskSurfaceClick = (event) => {
-    if (suppressClickRef.current) return;
+    if (suppressClickRef.current || Date.now() - lastTransformAtRef.current < 180) return;
     onSelectItem?.(null);
     onSelectUnderlay?.(null);
     onDeskClick(event);
@@ -174,6 +181,7 @@ const DeskCanvas = ({
   const handlePointerDown = (event, item) => {
     event.preventDefault();
     event.stopPropagation();
+    markTransformInteraction();
 
     if (!deskRef.current) return;
 
@@ -196,6 +204,7 @@ const DeskCanvas = ({
   const handleUnderlayPointerDown = (event, underlay) => {
     event.preventDefault();
     event.stopPropagation();
+    markTransformInteraction();
 
     if (!deskRef.current) return;
 
@@ -218,6 +227,7 @@ const DeskCanvas = ({
   const handleResizePointerDown = (event, item) => {
     event.preventDefault();
     event.stopPropagation();
+    markTransformInteraction();
 
     if (!deskRef.current) return;
 
@@ -244,6 +254,7 @@ const DeskCanvas = ({
   const handleUnderlayResizePointerDown = (event, underlay, direction = 'se') => {
     event.preventDefault();
     event.stopPropagation();
+    markTransformInteraction();
 
     if (!deskRef.current) return;
 
@@ -278,6 +289,7 @@ const DeskCanvas = ({
   const handleRotate = async (event, item, delta) => {
     event.preventDefault();
     event.stopPropagation();
+    markTransformInteraction();
     const nextRotation = (((item.rotation || 0) + delta) % 360 + 360) % 360;
     onItemPreview(item._id, { rotation: nextRotation });
     await onItemCommit(item._id, { rotation: nextRotation });

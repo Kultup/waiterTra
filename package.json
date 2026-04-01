@@ -9,7 +9,9 @@
     "client": "cd client && npm start",
     "install-all": "npm install && cd server && npm install && cd ../client && npm install",
     "seed:game": "cd server && node seedScenario.js",
-    "build": "cd client && npm run build"
+    "build": "cd client && npm run build",
+    "test:server": "cd server && npm test",
+    "test:client": "cd client && npm test"
   },
   "keywords": [
     "serviq",
@@ -23,10 +25,5 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "nodemon": "^3.0.2"
-  },
-  "dependencies": {
-    "all": "^0.0.0",
-    "bcryptjs": "^3.0.3",
-    "react-router-dom": "^7.13.1"
   }
 }
