@@ -75,19 +75,30 @@ router.delete('/:id', deskEditorAuth, async (req, res) => {
   }
 });
 
-// Download scenario Excel template
+// Download standard scenario Excel template
 router.get('/scenario-template/excel', (req, res) => {
   try {
     const templatePath = path.join(__dirname, '..', '..', 'templates', 'scenario_template.xlsx');
-    
     if (!fs.existsSync(templatePath)) {
       return res.status(404).json({ error: 'Шаблон не знайдено' });
     }
-    
     res.download(templatePath, 'scenario_template.xlsx', (err) => {
-      if (err) {
-        console.error('Error downloading template:', err);
-      }
+      if (err) console.error('Error downloading template:', err);
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Download quiz scenario Excel template (4-column format: Ситуація / L1 / L2 / L3+Results)
+router.get('/quiz-template/excel', (req, res) => {
+  try {
+    const templatePath = path.join(__dirname, '..', '..', 'templates', 'quiz_scenario_template.xlsx');
+    if (!fs.existsSync(templatePath)) {
+      return res.status(404).json({ error: 'Шаблон квізу не знайдено' });
+    }
+    res.download(templatePath, 'quiz_scenario_template.xlsx', (err) => {
+      if (err) console.error('Error downloading quiz template:', err);
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

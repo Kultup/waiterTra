@@ -285,15 +285,24 @@ const QuizBuilder = () => {
                     return;
                 }
 
-                const questions = dataRows.map(r => {
-                    const options = [r[1], r[2], r[3], r[4]]
-                        .map(o => String(o).trim())
+                const questions = dataRows.map((r, index) => {
+                    // r[0]: question, r[1-4]: options, r[5]: correctIndex (1-based), r[6]: explanation
+                    const rawOptions = [r[1], r[2], r[3], r[4]];
+                    const options = rawOptions
+                        .map(o => String(o || '').trim())
                         .filter(o => o !== '');
-                    const correctIndex = Math.max(0, parseInt(r[5]) - 1) || 0;
+
+                    let correctIndex = parseInt(r[5]);
+                    if (isNaN(correctIndex)) {
+                        correctIndex = 0;
+                    } else {
+                        correctIndex = Math.max(0, correctIndex - 1);
+                    }
+
                     return {
-                        text: String(r[0]).trim(),
+                        text: String(r[0] || '').trim(),
                         options: options.length >= 2 ? options : [...options, '', ''].slice(0, 2),
-                        correctIndex: Math.min(correctIndex, options.length - 1),
+                        correctIndex: Math.min(correctIndex, Math.max(0, options.length - 1)),
                         explanation: String(r[6] || '').trim(),
                         image: '',
                         video: ''

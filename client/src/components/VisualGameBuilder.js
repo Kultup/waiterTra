@@ -9,6 +9,7 @@ import './VisualGameBuilder.css';
 const genNodeId = () => `n_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 const genChoiceId = () => `c_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 const genCharId = () => `ch_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+const normalizeNodeText = (str) => String(str || '').toLowerCase().replace(/[\s\r\n\t]+/g, ' ').trim();
 
 const AVATAR_PRESETS = ['🧑‍🍳', '👨‍🍳', '👩‍🍳', '🤵', '👰', '👨‍💼', '👩‍💼', '🧑‍💼', '👮', '🧑‍🎓', '👨‍🎓', '👩‍🎓', '🧙', '🦸', '🦹', '🤖', '😊', '👤'];
 const COLOR_PRESETS = ['#ff6d5a', '#38bdf8', '#4caf50', '#ff9800', '#a855f7', '#ec4899', '#14b8a6', '#f59e0b'];
@@ -1224,7 +1225,7 @@ const VisualGameBuilder = () => {
             nodeText: findColumnIndex(['текст сцени', 'сцена', 'текст', 'text', 'scene', 'опис', 'опис сцени', 'ситуація', 'питання']),
             speaker: findColumnIndex(['персонаж', 'хто', 'speaker', 'actor', 'герой', 'діюча особа', 'роль']),
             choiceText: findColumnIndex(['вибір', 'дія', 'choice', 'action', 'варіант', 'відповідь', 'варіант відповіді', 'що робити']),
-            nextNode: findColumnIndex(['наступна сцена', 'куди', 'next', 'наступний', 'продовження', 'перехід', 'до']),
+            nextNode: findColumnIndex(['наступна сцена', 'куди', 'next', 'наступний', 'продовження', 'перехід', 'до', 'наступний вузол', 'ціль', 'link', 'target']),
             isWin: findColumnIndex(['перемога', 'win', 'iswin', 'успіх', 'результат гри', 'фінал']),
             result: findColumnIndex(['результат', 'result', 'наслідок', 'фінал', 'підсумок', 'висновок'])
         };
@@ -1241,16 +1242,17 @@ const VisualGameBuilder = () => {
         const characters = [];
         const charMap = new Map();
 
-        // Збираємо унікальні вузли та персонажів
+        // Перший прохід: збираємо всі вузли, що мають текст сцени
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            if (!row[idx.nodeText]) continue;
+            if (!row || !row[idx.nodeText]) continue;
 
             const nodeText = String(row[idx.nodeText]).trim();
+            const normText = normalizeNodeText(nodeText);
             const speaker = row[idx.speaker] ? String(row[idx.speaker]).trim() : '';
 
-            if (!nodesMap.has(nodeText)) {
-                nodesMap.set(nodeText, {
+            if (!nodesMap.has(normText)) {
+                nodesMap.set(normText, {
                     text: nodeText,
                     speaker: speaker,
                     choices: []
@@ -1269,14 +1271,14 @@ const VisualGameBuilder = () => {
                 }
             }
 
-            // Додаємо вибір якщо є
+            // Додаємо вибір
             if (idx.choiceText !== -1 && row[idx.choiceText]) {
                 const choiceText = String(row[idx.choiceText]).trim();
                 const nextNode = idx.nextNode !== -1 && row[idx.nextNode] ? String(row[idx.nextNode]).trim() : null;
                 const isWin = idx.isWin !== -1 && (row[idx.isWin] === true || row[idx.isWin] === 'true' || row[idx.isWin] === 1);
                 const result = idx.result !== -1 && row[idx.result] ? String(row[idx.result]).trim() : '';
 
-                nodesMap.get(nodeText).choices.push({
+                nodesMap.get(normText).choices.push({
                     text: choiceText,
                     nextNode: nextNode || null,
                     isWin,
@@ -1285,7 +1287,25 @@ const VisualGameBuilder = () => {
             }
         }
 
-        // Створюємо структуру сценарію
+        // Другий прохід: створюємо автоматичні вузли для посилань на "порожні" сцени (термінальні вузли)
+        const initialNodes = Array.from(nodesMap.keys());
+        initialNodes.forEach((normKey) => {
+            const node = nodesMap.get(normKey);
+            node.choices.forEach((choice) => {
+                if (choice.nextNode) {
+                    const normNext = normalizeNodeText(choice.nextNode);
+                    if (!nodesMap.has(normNext)) {
+                        console.log(`Auto-creating terminal node: "${choice.nextNode}"`);
+                        nodesMap.set(normNext, {
+                            text: choice.nextNode,
+                            speaker: '',
+                            choices: []
+                        });
+                    }
+                }
+            });
+        });
+
         const nodesArray = Array.from(nodesMap.values());
         const startNode = nodesArray.length > 0 ? nodesArray[0].text : '';
 
@@ -1295,12 +1315,12 @@ const VisualGameBuilder = () => {
             description: 'Імпортовано з Excel файлу',
             targetCity: '',
             characters,
-            nodes: nodesArray.map(n => ({
+            nodes: nodesArray.map((n, i) => ({
                 text: n.text,
                 speaker: n.speaker,
                 choices: n.choices,
-                x: 100 + (nodesArray.indexOf(n) % 5) * 280,
-                y: 100 + Math.floor(nodesArray.indexOf(n) / 5) * 200
+                x: 100 + (i % 5) * 280,
+                y: 100 + Math.floor(i / 5) * 200
             })),
             startNode
         };
@@ -1350,7 +1370,7 @@ const VisualGameBuilder = () => {
                 if (n.text === startNodeText) {
                     startNodeId = nodeId;
                 }
-                nodeMap[n.text] = nodeId;
+                nodeMap[normalizeNodeText(n.text)] = nodeId;
                 return {
                     nodeId,
                     text: n.text,
@@ -1368,11 +1388,18 @@ const VisualGameBuilder = () => {
             });
 
             newNodes.forEach(node => {
-                const originalNode = importData.nodes.find(n => n.text === node.text);
+                const normalizedText = normalizeNodeText(node.text);
+                const originalNode = importData.nodes.find(n => normalizeNodeText(n.text) === normalizedText);
                 if (originalNode?.choices) {
                     originalNode.choices.forEach((c, i) => {
-                        if (c.nextNode && nodeMap[c.nextNode]) {
-                            node.choices[i].nextNodeId = nodeMap[c.nextNode];
+                        if (c.nextNode) {
+                            const targetText = normalizeNodeText(c.nextNode);
+                            const targetId = nodeMap[targetText];
+                            if (targetId) {
+                                node.choices[i].nextNodeId = targetId;
+                            } else {
+                                console.warn(`Import: failed to find node for junction "${c.nextNode}" (normalized: "${targetText}") from node "${node.text}"`);
+                            }
                         }
                     });
                 }
@@ -1529,10 +1556,17 @@ const VisualGameBuilder = () => {
                         )}
                         <button 
                             className="n8n-btn n8n-btn-secondary" 
-                            onClick={() => window.open(`${API_URL}/templates/scenario-template/excel`, '_blank')} 
-                            title="Завантажити шаблон Excel"
+                            onClick={() => window.open(`${API_URL}/templates/quiz-template/excel`, '_blank')} 
+                            title="Завантажити шаблон квізу (4-колонковий формат: Ситуація → Рівень 1 → Рівень 2 → Рівень 3 + Результати)"
                         >
-                            📋 Шаблон
+                            📋 Шаблон квізу
+                        </button>
+                        <button 
+                            className="n8n-btn n8n-btn-secondary" 
+                            onClick={() => window.open(`${API_URL}/templates/scenario-template/excel`, '_blank')} 
+                            title="Завантажити шаблон лінійного сценарію (колонки: Текст сцени, Персонаж, Вибір, Наступна сцена)"
+                        >
+                            📋 Шаблон сценарію
                         </button>
                         <button className="n8n-btn n8n-btn-secondary" onClick={handleImportClick} title="Імпорт JSON або Excel">📥 Імпорт</button>
                         <button className="n8n-btn n8n-btn-primary" onClick={openNew}>+ Новий сценарій</button>
